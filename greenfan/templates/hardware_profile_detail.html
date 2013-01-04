@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<dl>
+<dt>Name</dt>
+<dd>{{ profile.name }}</dd>
+<dt>JSON Description</dt>
+<dd><pre>{{ profile.json_description }}</pre></dd>
+<dt>Tags</dt>
+<dd><ul>
+{% for tag in profile.tags.all %}
+<li>{{ tag.name }}</li>
+{% endfor %}
+</ul></dd>
+</dl>
+{% endblock %}

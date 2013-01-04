@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<table class="table table-striped table-condensed">
+<tr>
+  <th>Name</th>
+{% for tag in tags %}
+  <th>{{ tag.name }}</td>
+{% endfor %}
+</tr>
+{% for profile in profiles %}
+<tr>
+  <td>{{ profile.name }}</td>
+{% for tag in tags %}
+  <td>{% if tag in profile.tags.all %}<span class="icon-ok"></span>{% endif %}</td>
+{% endfor %}
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

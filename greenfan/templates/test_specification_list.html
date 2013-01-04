@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<table class="table table-bordered table-striped table-condensed">
+<tr>
+  <th>Name</th>
+  <th>Nodes</th>
+</tr>
+{% for spec in specs %}
+<tr>
+  <td rowspan="{{ spec.nodes_qs.count }}">{{ spec.name }}<pre>{{ spec.json_description }}</pre></td>
+  {% for node in spec.nodes %}
+    {% if not forloop.first %}
+<tr>
+    {% endif %}
+  <td>{{ node.name }}</td>
+  {% if not forloop.last %}
+</tr>
+  {% endif %}
+  {% endfor %}
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

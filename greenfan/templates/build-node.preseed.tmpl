@@ -1,0 +1,38 @@
+d-i mirror/country string manual
+d-i mirror/http/hostname string us.archive.ubuntu.com
+d-i mirror/http/directory string /ubuntu
+d-i mirror/http/proxy string http://172.29.74.52:3142/
+d-i partman/early_command string for dev in /dev/sd?; do if blockdev --getsize $dev > /dev/null 2>&1 ; then debconf-set partman-auto/disk "$dev"; break; fi; done
+d-i partman/alignment string cylinder
+d-i partman-md/device_remove_md boolean true
+d-i partman-md/confirm boolean true
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman-lvm/confirm boolean true
+d-i partman/choose_partition select Finish
+d-i partman/confirm_write_new_label boolean true
+d-i partman-auto/method string regular
+d-i partman-auto/choose_recipe select atomic
+d-i partman/choose_partition select Finish partitioning and write changes to disk
+d-i partman-md/confirm_nooverwrite boolean true
+d-i partman-md/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-lvm/confirm boolean true
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select Finish
+d-i partman/confirm_nooverwrite boolean true
+d-i partman/confirm boolean true
+d-i clock-setup/utc boolean true
+d-i clock-setup/ntp boolean true
+d-i clock-setup/ntp-server string undef
+d-i time/zone string UTC
+d-i passwd/user-fullname string Admin Adminson
+d-i passwd/username string {{ config.admin_user }}
+d-i passwd/user-password-crypted password {{ config.admin_password_crypted }}
+d-i user-setup/encrypt-home boolean false
+d-i grub-installer/only_debian boolean true
+d-i finish-install/reboot_in_progress note
+d-i pkgsel/update-policy select none
+d-i pkgsel/include string openssh-server puppetmaster-passenger puppet
+d-i preseed/early_command string wget -O /dev/null http://$http_server:$http_port/cblr/svc/op/trig/mode/pre/system/$system_name 
+d-i preseed/late_command string in-target wget -O /dev/null http://$http_server:$http_port/cblr/svc/op/trig/mode/post/system/$system_name ; \
+                                          wget -O /dev/null http://$http_server:$http_port/cblr/svc/op/nopxe/system/$system_name
