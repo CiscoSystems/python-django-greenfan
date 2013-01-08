@@ -73,14 +73,11 @@ class Command(BaseCommand):
                                                       'tenant_name': admin_user['tenant'],
                                                       'password': admin_user['password']}
         tempest_default_overrides['compute-admin'] = tempest_default_overrides['identity-admin']
-                                                     
-                                                    
         
         glance = get_glance_connection(username=non_priv_user1['name'],
                                        password=non_priv_user1['password'],
                                        tenant_name=non_priv_user1['tenant'],
                                        auth_url='http://%s:5000/v2.0/' % (job.control_node().ip))
-        print list(glance.images.list())
         image = list(glance.images.list(name=job.description['images'][0]['name']))[0]
 
         if not 'ALL' in tempest_default_overrides:
@@ -89,7 +86,7 @@ class Command(BaseCommand):
         tempest_default_overrides['ALL']['image_ref'] = image.id
         tempest_default_overrides['ALL']['image_ref_alt'] = image.id
         sudo('apt-get -y install git python-unittest2')
-#        run('git clone https://github.com/CiscoSystems/tempest')
+        run('git clone https://github.com/CiscoSystems/tempest')
       
         conf_sample = StringIO()
         get('tempest/etc/tempest.conf.sample', conf_sample)
