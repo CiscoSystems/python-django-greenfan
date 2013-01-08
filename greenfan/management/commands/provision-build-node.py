@@ -40,7 +40,10 @@ class Command(BaseCommand):
             fp.write(render_to_string('build-node.preseed.tmpl',
                                       {'config': config}))
 
-        run_cmd(['sudo', 'cobbler', 'system', 'remove', '--name=%s' % (job.build_node().name,)])
+        try:
+            run_cmd(['sudo', 'cobbler', 'system', 'remove', '--name=%s' % (job.build_node().name,)])
+        except:
+            pass
         run_cmd(['sudo', 'cobbler', 'system', 'add',
                                 '--name=%s' % (job.build_node().name,),
                                 '--mac-address=%s' % (job.build_node().mac,),
