@@ -43,9 +43,6 @@ class Command(BaseCommand):
         fabric_env.abort_on_prompts = True
         fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
  
-        job.description['manifest'] = {'git': {'repository': 'http://github.com/sorenh/folsom-manifests.git',
-                                               'branch': 'multi-node-templated',
-                                               'subdir': 'manifests'}}
         if 'manifest' in job.description:
            manifest_dir = utils.build_manifest_dir(job.description['manifest'],
                                                    {'job': job,
