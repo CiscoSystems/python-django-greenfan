@@ -73,5 +73,5 @@ class Command(BaseCommand):
         sudo('apt-get update')
         sudo('apt-get install -y puppet-openstack-cisco')
         sudo('puppet apply /etc/puppet/manifests/site.pp')
-        sudo('puppet agent -t')
+        sudo('puppet agent -t || true')
         sudo("grep -q -- fence.*-z /etc/cobbler/power/power_ucs.template || sed -e '/fence/ s/$/ -z/' -i /etc/cobbler/power/power_ucs.template")
