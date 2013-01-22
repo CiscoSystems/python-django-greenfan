@@ -18,7 +18,7 @@
 from glob import glob
 import os
 import shutil
-from subprocess import Popen
+from subprocess import Popen, PIPE
 import tempfile
 
 from django.template import Context, Template
@@ -26,8 +26,12 @@ from django.template import Context, Template
 from fabric.api import run, local, sudo, put
 import paramiko
 
-def run_cmd(args):
-    proc = Popen(args)
+def run_cmd(args, capture_stdout=False):
+    if capture_stdout:
+        kwargs = {'stdout': PIPE}
+    else:
+        kwargs = {}
+    proc = Popen(args, **kwargs)
     return proc.communicate()
 
 
@@ -153,3 +157,8 @@ def build_manifest_dir(manifest_info, context):
         generate_manifests_from_git(manifest_info['git'], tmpdir, manifest_dir, context)
     shutil.rmtree(tmpdir)
     return manifest_dir
+
+def src_ip(dest_ip='8.8.8.8'):
+    stdout, stderr = run_cmd(['ip', '-o', 'route', 'get', dest_ip], capture_stdout=True)
+    parts = stdout.split(' ')
+    return parts[parts.index('src')+1]

@@ -22,6 +22,7 @@ from time import sleep
 
 from django.core.management.base import BaseCommand
 from django.template.loader import render_to_string
+from greenfan import utils
 from greenfan.models import Configuration, TestSpecification, Server
 
 def run_cmd(args):
@@ -52,7 +53,9 @@ class Command(BaseCommand):
                                 '--dns-name=%s' % (job.build_node().fqdn(),),
                                 '--hostname=%s' % (job.build_node().fqdn(),),
                                 '--kickstart=%s' % (preseed_path,),
-                                '--kopts="netcfg/disable_autoconfig=true '
+                                '--kopts="log_host=%s '
+                                         'log_port=%d '
+                                         'netcfg/disable_autoconfig=true '
                                          'netcfg/dhcp_failed=true '
                                          "netcfg/dhcp_options='Configure network manually' "
                                          'netcfg/get_nameservers=%s '
@@ -61,7 +64,9 @@ class Command(BaseCommand):
                                          'netcfg/get_gateway=%s '
                                          'netcfg/confirm_static=true '
                                          'clock-setup/ntp-server=%s '
-                                         'partman-auto/disk=%s"' % (config.name_server(),
+                                         'partman-auto/disk=%s"' % (utils.src_ip(job.build_node().ip),
+                                                                    job.log_listener_port,
+                                                                    config.name_server(),
                                                                     job.build_node().ip,
                                                                     config.netmask,
                                                                     config.gateway,

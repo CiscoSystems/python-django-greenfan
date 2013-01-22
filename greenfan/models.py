@@ -26,10 +26,13 @@ from django.template.loader import render_to_string
 
 from jsonfield import JSONField
 
+from greenfan import utils
 
 class TestSpecification(models.Model):
     name = models.CharField(max_length=200)
     description = JSONField()
+    log_listener_port = models.IntegerField(null=True, blank=True)
+    log_listener_dir = models.CharField(max_length=200, null=True, blank=True)
 
     def nodes_qs(self):
         qs = Server.objects.exclude(disabled=True)
@@ -75,6 +78,10 @@ class TestSpecification(models.Model):
 
     def json_description(self):
         return json.dumps(self.description, indent=2)
+
+    def logging(self):
+        return {'host': utils.src_ip(self.build_node().ip),
+                'port': self.log_listener_port}
 
     def manifest(self):
         return render_to_string('manifest.tmpl',
