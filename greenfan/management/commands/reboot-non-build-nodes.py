@@ -51,5 +51,5 @@ class Command(BaseCommand):
         for node in nodes:
             sudo('timeout 10 cobbler system poweroff --name=%s' % (node,))
         sleep(5)
-        for node in job.non_build_nodes():
+        for node in nodes:
             sudo('timeout 10 cobbler system poweron --name=%s' % (node,))
