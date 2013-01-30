@@ -18,6 +18,7 @@
 import os
 import os.path
 from subprocess import Popen
+import sys
 from time import sleep 
 
 from django.core.management.base import BaseCommand
@@ -27,6 +28,7 @@ from greenfan.models import Configuration, TestSpecification, Server
 
 def run_cmd(args):
     print args
+    sys.stdout.flush()
     proc = Popen(args)
     return proc.communicate()
 

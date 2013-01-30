@@ -44,6 +44,7 @@ class Command(BaseCommand):
                     if l.startswith('netboot_enabled') and l.endswith('False'):
                         return True
                 print "Not done yet. %s seconds left." % (timeout - time(),)
+                self.stdout.flush()
                 sleep(5)
             return False
         
@@ -55,7 +56,8 @@ class Command(BaseCommand):
                     return True
                 except NetworkError, e:
                     print e
-            sleep(5)
+                    self.stdout.flush()
+                sleep(5)
             return False
 
         if not wait_for_ubuntu_install_to_finish():

@@ -52,5 +52,6 @@ class Command(BaseCommand):
             if actual_set == expected_set:
                 return ''
             print 'Not done yet. %d seconds left' % (timeout - time(),)
+            self.stdout.flush()
             sleep(5)
         raise Exception('Timed out')
