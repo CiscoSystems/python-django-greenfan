@@ -70,8 +70,7 @@ class Command(BaseCommand):
                                           {'port': port,
                                            'logfile': rsyslog_log_file}))
 
-            # 'strace', '-o', '/tmp/nc.log', '-f', 
-            rsyslog = Popen(['/usr/sbin/rsyslogd', '-c5', '-f', rsyslog_conf_file, '-i', rsyslog_pid_file])
+            Popen(['/usr/sbin/rsyslogd', '-c5', '-f', rsyslog_conf_file, '-i', rsyslog_pid_file])
             job.log_listener_dir = tmpdir
 
             # Let rsyslog start and create the file
