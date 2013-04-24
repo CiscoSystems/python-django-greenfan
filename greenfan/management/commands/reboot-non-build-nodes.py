@@ -42,11 +42,10 @@ class Command(BaseCommand):
         fabric_env.password = config.admin_password
         fabric_env.abort_on_prompts = True
         fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
- 
-        
-	out = sudo('cobbler system find --netboot-enabled=true')
+
+        out = sudo('cobbler system find --netboot-enabled=true')
         nodes = out.split('\n')
-        nodes = map(lambda x:x.strip(), nodes)
+        nodes = map(lambda x: x.strip(), nodes)
 
         for node in nodes:
             sudo('timeout 10 cobbler system poweroff --name=%s' % (node,))
