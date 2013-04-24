@@ -11,6 +11,7 @@ setup(
     include_package_data=True,
     license='Apache 2.0',
     keywords='django openstack ci',
+    test_suite='tests.main',
     install_requires=[
         'django',
     ],

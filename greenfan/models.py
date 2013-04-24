@@ -102,19 +102,25 @@ class Configuration(models.Model):
     admin_user = models.CharField(max_length=200)
     admin_password = models.CharField(max_length=200)
 
+    @classmethod
+    def _check_at_most_one_conf(cls):
+        if Configuration.objects.count() > 1:
+            raise Exception('Multiple configs found')
+
     def save(self):
+        self._check_at_most_one_conf()
+
         # Poor man's singleton implementation
         if self.id is None:
             confs = Configuration.objects.all()
-            if len(confs) > 1:
-                raise Exception('Multiple configs found')
-            elif len(confs) == 1:
+            if len(confs) == 1:
                 self.id = confs[0].id
 
         return super(Configuration, self).save()
 
     @classmethod
     def get(cls):
+        cls._check_at_most_one_conf()
         return cls.objects.all()[0]
 
     def name_server_list(self):
@@ -135,15 +141,16 @@ class Configuration(models.Model):
         return crypt(self.admin_password, '$6$%s' % (salt,))
 
     def subnet_as_sql(self):
-        if self.netmask.endswith('0.0.0'):
-            wildcards = 3
-        elif self.netmask.endswith('0.0'):
+        if self.netmask.startswith('255.255.255'):
+            wildcards = 1
+        elif self.netmask.startswith('255.255'):
             wildcards = 2
         else:
-            wildcards = 1
+            wildcards = 3
 
         return '%s.%s' % ('.'.join(self.subnet.split('.')[:4-wildcards]),
-                          '.'.join(['%' for x in range(wildcards)]))
+                          '.'.join(['%']*wildcards))
+
 
 class HardwareProfileTag(models.Model):
     name = models.CharField(max_length=200, primary_key=True)
