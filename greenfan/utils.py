@@ -23,8 +23,7 @@ import tempfile
 
 from django.template import Context, Template
 
-from fabric.api import run, local, sudo, put
-import paramiko
+from fabric.api import sudo, put
 
 def run_cmd(args, capture_stdout=False):
     if capture_stdout:
@@ -34,45 +33,6 @@ def run_cmd(args, capture_stdout=False):
     proc = Popen(args, **kwargs)
     return proc.communicate()
 
-
-def run_cmd_over_ssh(username, address, cmd, input=None, output_callback=lambda x:None):
-    out = ''
-    for data in run_cmd_over_ssh_streaming(username, address, cmd, input):
-        output_callback(data)
-        out += data
-
-    return out
-
-def run_cmd_over_ssh_streaming(username, address, cmd, input=None):
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(address, username=username, pkey=self.paramiko_private_key)
-
-    transport = ssh.get_transport()
-
-    chan = transport.open_session()
-    chan.exec_command(cmd)
-    chan.set_combine_stderr(True)
-    if input:
-        chan.sendall(input)
-        chan.shutdown_write()
-
-    while True:
-        r, _, __ = select.select([chan], [], [], 1)
-        if r:
-            if chan in r:
-                if chan.recv_ready():
-                    s = chan.recv(4096)
-                    if len(s) == 0:
-                        break
-                    yield s
-                else:
-                    status = chan.recv_exit_status()
-                    if status != 0:
-                        raise Exception('Command %s failed' % cmd)
-                    break
-
-    ssh.close()
 
 def git_cmd_from_git_info(git_info, tmpdir):
     cmd = ['git', 'clone']
@@ -112,7 +72,7 @@ def _render_template_recursive(src, dst, context, topdir=None):
         dstpath = dstpath.rstrip('/')
         if not os.path.exists(dstpath):
             os.mkdir(dstpath)
-    	for f in glob(os.path.join(src, '*')):
+        for f in glob(os.path.join(src, '*')):
             _render_template_recursive(f, dst, context, topdir)
     else:
         render(src, dstpath, context)
@@ -132,7 +92,7 @@ def put_recursive(src, dst, topdir=None):
         dstpath = dstpath[:len(dstpath)]
         dstpath = dstpath.rstrip('/')
         sudo('mkdir -p %s' % (dstpath,))
-    	for f in glob(os.path.join(src, '*')):
+        for f in glob(os.path.join(src, '*')):
             put_recursive(f, dst, topdir)
     else:
         put(src, dstpath, use_sudo=True)
