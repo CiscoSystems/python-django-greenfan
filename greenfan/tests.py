@@ -15,12 +15,6 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
-"""
-This file demonstrates writing tests using the unittest module. These will pass
-when you run "manage.py test".
-
-Replace this with more appropriate tests for your application.
-"""
 
 import crypt
 import mock
@@ -28,7 +22,9 @@ import os
 import shutil
 import tempfile
 import textwrap
+from StringIO import StringIO
 
+from django.core import management
 from django.test import TestCase
 
 from greenfan import models
@@ -321,3 +317,35 @@ class ModelTests(TestCase):
                                "foo"
                              ]"""))
 
+
+class CommandsTests(TestCase):
+    fixtures = ['test_nodes.yaml', 'test_testspec.yaml']
+
+    def test_reboot_non_build_nodes(self):
+        from fabric.api import env as fabric_env
+
+        expected_calls = [
+                    'cobbler system find --netboot-enabled=true',
+                    'timeout 10 cobbler system poweroff --name=foo',
+                    'timeout 10 cobbler system poweroff --name=bar',
+                    'timeout 10 cobbler system poweron --name=foo',
+                    'timeout 10 cobbler system poweron --name=bar']
+
+        def faked_responses(cmd):
+            if cmd == 'cobbler system find --netboot-enabled=true':
+                return 'foo\nbar\n'
+            else:
+                return ''
+
+        with mock.patch('fabric.api.sudo', side_effect=faked_responses) as sudo:
+            with mock.patch('time.sleep') as sleep:
+                management.call_command('reboot-non-build-nodes', '1')
+
+                for call in expected_calls:
+                    sudo.assert_any_call(call)
+
+                sleep.assert_called_with(5)
+        self.assertEquals(fabric_env.host_string, 'adminuser@10.10.4.1')
+        self.assertEquals(fabric_env.password, 'adminpass')
+        self.assertEquals(fabric_env.abort_on_prompts, True)
+        self.assertEquals(fabric_env.sudo_prefix, 'sudo -H -S -p \'%(sudo_prompt)s\' ')

@@ -29,9 +29,6 @@ from fabric.api import run, local, sudo, put
 from greenfan import utils
 from greenfan.models import Configuration, TestSpecification, Server
 
-def run_cmd(args):
-    proc = Popen(args)
-    return proc.communicate()
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
@@ -44,6 +41,7 @@ class Command(BaseCommand):
         fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
 
         out = sudo('cobbler system find --netboot-enabled=true')
+        out = out.strip()
         nodes = out.split('\n')
         nodes = map(lambda x: x.strip(), nodes)
 
