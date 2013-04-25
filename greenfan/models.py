@@ -196,6 +196,3 @@ class Server(models.Model):
 
     def fqdn(self):
         return '%s.%s' % (self.name, Configuration.get().domain)
-
-    def preseed(self):
-        return ''
