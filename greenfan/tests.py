@@ -337,8 +337,8 @@ class CommandsTests(TestCase):
             else:
                 return ''
 
-        with mock.patch('fabric.api.sudo', side_effect=faked_responses) as sudo:
-            with mock.patch('time.sleep') as sleep:
+        with mock.patch('greenfan.models.sudo', side_effect=faked_responses) as sudo:
+            with mock.patch('greenfan.models.sleep') as sleep:
                 management.call_command('reboot-non-build-nodes', '1')
 
                 for call in expected_calls:

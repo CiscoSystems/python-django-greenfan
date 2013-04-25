@@ -19,14 +19,16 @@ from crypt import crypt
 import json
 import random
 import string
+from time import sleep
 import IPy
 
 from django.db import models
-from django.template.loader import render_to_string
-
+from fabric.api import env as fabric_env
+from fabric.api import sudo
 from jsonfield import JSONField
 
 from greenfan import utils
+
 
 class TestSpecification(models.Model):
     name = models.CharField(max_length=200)
@@ -83,11 +85,26 @@ class TestSpecification(models.Model):
         return {'host': utils.src_ip(self.build_node().ip),
                 'port': self.log_listener_port}
 
-    def manifest(self):
-        return render_to_string('manifest.tmpl',
-                                {'job': self,
-                                 'config': Configuration.get(),
-                                 'nodes': self.nodes()})
+    def _get_nodes_still_installing(self):
+        out = sudo('cobbler system find --netboot-enabled=true')
+        nodes = out.split('\n')
+        return  map(lambda x: x.strip(), nodes)
+
+    def reboot_non_build_nodes(self):
+        config = Configuration.get()
+
+        fabric_env.host_string = '%s@%s' % (config.admin_user,
+                                            self.build_node().ip)
+        fabric_env.password = config.admin_password
+        fabric_env.abort_on_prompts = True
+        fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
+
+        nodes = self._get_nodes_still_installing()
+        for node in nodes:
+            sudo('timeout 10 cobbler system poweroff --name=%s' % (node,))
+        sleep(5)
+        for node in nodes:
+            sudo('timeout 10 cobbler system poweron --name=%s' % (node,))
 
 class Configuration(models.Model):
     subnet = models.IPAddressField()

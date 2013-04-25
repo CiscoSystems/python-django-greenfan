@@ -15,38 +15,12 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
-import tempfile
-import urlparse
-
-from subprocess import Popen
-from time import sleep, time
-
 from django.core.management.base import BaseCommand
-from django.template import Context, Template
-from fabric.api import env as fabric_env
-from fabric.api import run, local, sudo, put
 
-from greenfan import utils
-from greenfan.models import Configuration, TestSpecification, Server
+from greenfan.models import TestSpecification
 
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = TestSpecification.objects.get(id=job_id)
-        config = Configuration.get()
-
-        fabric_env.host_string = '%s@%s' % (config.admin_user, job.build_node().ip)
-        fabric_env.password = config.admin_password
-        fabric_env.abort_on_prompts = True
-        fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
-
-        out = sudo('cobbler system find --netboot-enabled=true')
-        out = out.strip()
-        nodes = out.split('\n')
-        nodes = map(lambda x: x.strip(), nodes)
-
-        for node in nodes:
-            sudo('timeout 10 cobbler system poweroff --name=%s' % (node,))
-        sleep(5)
-        for node in nodes:
-            sudo('timeout 10 cobbler system poweron --name=%s' % (node,))
+        job.reboot_non_build_nodes()
