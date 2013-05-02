@@ -48,7 +48,7 @@ class Command(BaseCommand):
                                                    {'job': job,
                                                     'config': Configuration.get(),
                                                     'nodes': job.nodes()})
-           utils.put_recursive(manifest_dir, '/etc/puppet/manifests')
+           utils.put_recursive(manifest_dir, job.description['manifest'].get('destdir', '/etc/puppet/manifests'))
        
         for archive in job.description['archives']:
             sudo('apt-get install -y python-software-properties')
