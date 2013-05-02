@@ -51,20 +51,28 @@ class Command(BaseCommand):
         for role in keystone.roles.list():
             role_info[role.name] = role
 
-        tenant_info = {}
+        tenant_info = dict((tenant.name, tenant) for tenant in keystone.tenants.list())
         if 'tenants' in job.description:
             tenants = job.description['tenants']
             for tenant in tenants:
+                if tenant['name'] in tenant_info:
+                    continue
                 tenant_obj = keystone.tenants.create(tenant_name=tenant['name'], description=tenant.get('description', tenant['name']), enabled=True)
                 tenant_info[tenant['name']] = tenant_obj
 
+        user_info = dict((user.name,user) for user in keystone.users.list())
         if 'users' in job.description:
             users = job.description['users']
             for user in users:
                 tenant = tenant_info[user['tenant']]
-                user_obj = keystone.users.create(name=user['name'],
-                                                 password=user['password'],
-                                                 email=user.get('email', '%s@example.com' % user['name']),
-                                                 tenant_id=tenant.id)
+
+                if user['name'] in user_info:
+                    user_obj = user_info[user['name']]
+                else:
+                    user_obj = keystone.users.create(name=user['name'],
+                                                     password=user['password'],
+                                                     email=user.get('email', '%s@example.com' % user['name']),
+                                                     tenant_id=tenant.id)
+
                 for role in user.get('roles', []):
                     keystone.roles.add_user_role(user_obj, role_info[role], tenant)
