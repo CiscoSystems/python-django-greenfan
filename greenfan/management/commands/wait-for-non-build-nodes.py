@@ -27,7 +27,7 @@ from fabric.api import env as fabric_env
 from fabric.api import run, local, sudo, put
 
 from greenfan import utils
-from greenfan.models import Configuration, TestSpecification, Server
+from greenfan.models import Configuration, Job, Server
 
 def run_cmd(args):
     proc = Popen(args)
@@ -35,7 +35,7 @@ def run_cmd(args):
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
-        job = TestSpecification.objects.get(id=job_id)
+        job = Job.objects.get(id=job_id)
         config = Configuration.get()
 
         fabric_env.host_string = '%s@%s' % (config.admin_user, job.build_node().ip)

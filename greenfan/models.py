@@ -17,12 +17,14 @@
 #
 from crypt import crypt
 import json
+import os.path
 import random
 import string
 from time import sleep
 import IPy
 
 from django.db import models
+from django.conf import settings
 from fabric.api import env as fabric_env
 from fabric.api import sudo
 from jsonfield import JSONField
@@ -33,8 +35,49 @@ from greenfan import utils
 class TestSpecification(models.Model):
     name = models.CharField(max_length=200)
     description = JSONField()
+
+    def create_job(self):
+        job = Job(description=self.description)
+        job.save()
+        return job
+
+class Job(models.Model):
+    PENDING = 1
+    RUNNING = 2
+    FINISHED = 3
+    CANCELED = 4
+    SERIES_STATES = (
+        (PENDING, 'Pending'),
+        (RUNNING, 'Running'),
+        (FINISHED, 'Finished'),
+        (CANCELED, 'Canceled'),
+    )
+
+    description = JSONField()
     log_listener_port = models.IntegerField(null=True, blank=True)
-    log_listener_dir = models.CharField(max_length=200, null=True, blank=True)
+    state = models.SmallIntegerField(default=PENDING,
+                                     choices=SERIES_STATES)
+
+    def run(self):
+        from django.core.management import call_command
+
+        def step(name):
+            call_command(name, '%s' % self.id)
+
+        try:
+            step('start-log-listener')
+            step('list-nodes')
+            step('provision-build-node')
+            step('wait-for-build-node')
+            step('install-and-configure-puppet')
+            step('reboot-non-build-nodes')
+            step('wait-for-non-build-nodes')
+            step('provision-users')
+            step('import-images')
+            step('run-tempest')
+        finally:
+            step('stop-log-listener')
+            step('turn-off-non-build-nodes')
 
     def nodes_qs(self):
         qs = Server.objects.exclude(disabled=True)
@@ -52,6 +95,22 @@ class TestSpecification(models.Model):
                 qs = qs.exclude(hardware_profile__tags__in=exclude)
 
         return qs
+
+    @property
+    def logdir(self):
+        return os.path.join(settings.JOB_LOG_DIR, '%s' % self.pk)
+
+    @property
+    def rsyslog_conf_file(self):
+        return os.path.join(self.logdir, 'rsyslog.conf')
+
+    @property
+    def rsyslog_log_file(self):
+        return os.path.join(self.logdir, 'logfile')
+
+    @property
+    def rsyslog_pid_file(self):
+        return os.path.join(self.logdir, 'rsyslog.pid')
 
     def nodes(self):
         return list(self.nodes_qs())

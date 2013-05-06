@@ -1,0 +1,122 @@
+- fields: {}
+  model: greenfan.hardwareprofiletag
+  pk: pod4
+- fields: {}
+  model: greenfan.hardwareprofiletag
+  pk: pod5
+- fields: {}
+  model: greenfan.hardwareprofiletag
+  pk: 2nic
+- fields: {}
+  model: greenfan.hardwareprofiletag
+  pk: 1nic
+- fields: {}
+  model: greenfan.hardwareprofiletag
+  pk: rack
+- fields: {}
+  model: greenfan.hardwareprofiletag
+  pk: blade
+- fields:
+    name: B-series
+    description: {}
+    tags:
+      - blade
+      - 2nic
+      - pod4
+  model: greenfan.hardwareprofile
+  pk: 1
+- fields:
+    name: C-series 2nic
+    description: {}
+    tags:
+      - rack
+      - 2nic
+      - pod4
+  model: greenfan.hardwareprofile
+  pk: 2
+- fields:
+    name: C-series 1nic
+    description: {}
+    tags:
+      - rack
+      - 1nic
+      - pod4
+  model: greenfan.hardwareprofile
+  pk: 3
+- fields:
+    name: pod4node1
+    ip: 10.10.4.1
+    mac: 01:01:01:01:04:01
+    power_address: 10.20.4.1
+    power_type: ucs
+    power_user: admin
+    power_password: 4dmin
+    power_id: test-1
+    hardware_profile: 1
+    disabled: false
+  model: greenfan.server
+  pk: 1
+- fields:
+    name: pod4node2
+    ip: 10.10.4.2
+    mac: 01:01:01:01:04:02
+    power_address: 10.20.4.1
+    power_type: ucs
+    power_user: admin
+    power_password: 4dmin
+    power_id: test-2
+    hardware_profile: 1
+    disabled: false
+  model: greenfan.server
+  pk: 2
+- fields:
+    name: pod5node1
+    ip: 10.10.5.1
+    mac: 01:01:01:01:05:01
+    power_address: 10.20.5.1
+    power_type: ipmi
+    power_user: admin
+    power_password: 4dmin
+    power_id: ""
+    hardware_profile: 2
+    disabled: false
+  model: greenfan.server
+  pk: 3
+- fields:
+    name: pod5node2
+    ip: 10.10.5.2
+    mac: 01:01:01:01:05:02
+    power_address: 10.20.5.2
+    power_type: ipmi
+    power_user: admin
+    power_password: 4dmin
+    power_id: ""
+    hardware_profile: 3
+    disabled: false
+  model: greenfan.server
+  pk: 4
+- fields:
+    name: pod5node3
+    ip: 10.10.5.3
+    mac: 01:01:01:01:05:03
+    power_address: 10.20.5.3
+    power_type: ipmi
+    power_user: admin
+    power_password: 4dmin
+    power_id: ""
+    hardware_profile: 2
+    disabled: true
+  model: greenfan.server
+  pk: 5
+- fields:
+    subnet: 10.0.0.0
+    netmask: 255.0.0.0
+    domain: example.com
+    gateway: 10.0.0.1
+    ntp_servers: 10.20.1.1 10.20.1.2
+    nameservers: 10.20.2.1 10.20.2.2
+    proxy: http://proxy.example.com:1234/
+    admin_user: adminuser
+    admin_password: adminpass
+  model: greenfan.configuration
+  pk: 1

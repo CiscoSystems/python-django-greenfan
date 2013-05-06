@@ -15,34 +15,14 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
-import os
-import os.path
-import shutil
-
-from subprocess import Popen, PIPE
-
 from django.core.management.base import BaseCommand
-from greenfan.models import Job
 
-
-def run_cmd(args, capture_stdout=True):
-    if capture_stdout:
-        kwargs = {'stdout': PIPE}
-    else:
-        kwargs = {}
-    proc = Popen(args, **kwargs)
-    return proc.communicate()
+from greenfan.models import TestSpecification
 
 
 class Command(BaseCommand):
-    def handle(self, job_id, **options):
-        job = Job.objects.get(id=job_id)
+    def handle(self, ts_id, **options):
+        ts = TestSpecification.objects.get(id=ts_id)
+        job = ts.create_job()
 
-        with open(job.rsyslog_pid_file, 'r') as fp:
-            pid = int(fp.read())
-
-        os.kill(pid, 2)
-        os.unlink(job.rsyslog_conf_file)
-        os.unlink(job.rsyslog_pid_file)
-
-        job.save()
+        return 'Created job %r' % job.pk

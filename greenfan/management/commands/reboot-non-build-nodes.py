@@ -17,10 +17,10 @@
 #
 from django.core.management.base import BaseCommand
 
-from greenfan.models import TestSpecification
+from greenfan.models import Job
 
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
-        job = TestSpecification.objects.get(id=job_id)
+        job = Job.objects.get(id=job_id)
         job.reboot_non_build_nodes()

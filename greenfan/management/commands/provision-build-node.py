@@ -24,7 +24,7 @@ from time import sleep
 from django.core.management.base import BaseCommand
 from django.template.loader import render_to_string
 from greenfan import utils
-from greenfan.models import Configuration, TestSpecification, Server
+from greenfan.models import Configuration, Job, Server
 
 def run_cmd(args):
     print args
@@ -34,7 +34,7 @@ def run_cmd(args):
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
-        job = TestSpecification.objects.get(id=job_id)
+        job = Job.objects.get(id=job_id)
         config = Configuration.get()
 
         preseed_path = os.path.join(os.getcwd(), 'preseeds', 'build-node.preseed')

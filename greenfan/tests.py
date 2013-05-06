@@ -157,74 +157,74 @@ class ModelTests(TestCase):
         if nodesspec:
             description['nodes'] = nodesspec
 
-        testspec = models.TestSpecification(name='all', description=description)
+        job = models.Job(description=description)
 
-        self.assertEquals(set(node.name for node in testspec.nodes()),
+        self.assertEquals(set(node.name for node in job.nodes()),
                           set(expected_servers))
 
-    def test_testspec_nodes_no_filters(self):
+    def test_job_nodes_no_filters(self):
         self._test_nodeset(None, ['pod4node1', 'pod4node2',
                                   'pod5node1', 'pod5node2'])
 
-    def test_testspec_nodes_exclude(self):
+    def test_job_nodes_exclude(self):
         self._test_nodeset({'exclude': 'rack'}, ['pod4node1', 'pod4node2'])
 
-    def test_testspec_nodes_include(self):
+    def test_job_nodes_include(self):
         self._test_nodeset({'include': 'rack'}, ['pod5node1', 'pod5node2'])
 
-    def test_testspec_nodes_include_and_exclude(self):
+    def test_job_nodes_include_and_exclude(self):
         self._test_nodeset({'include': 'rack',
                             'exclude': '1nic'}, ['pod5node1'])
 
-    def test_testspec_build_node_not_control_node(self):
-        testspec = models.TestSpecification(name='all', description={})
-        self.assertNotEquals(testspec.build_node(), testspec.control_node())
+    def test_job_build_node_not_control_node(self):
+        job = models.Job(description={})
+        self.assertNotEquals(job.build_node(), job.control_node())
 
-    def test_testspec_build_node_not_in_non_build_nodes(self):
-        testspec = models.TestSpecification(name='all', description={})
-        build_node = testspec.build_node()
-        non_build_nodes = testspec.non_build_nodes()
+    def test_job_build_node_not_in_non_build_nodes(self):
+        job = models.Job(description={})
+        build_node = job.build_node()
+        non_build_nodes = job.non_build_nodes()
         self.assertNotIn(build_node, non_build_nodes)
 
-    def test_testspec_build_node_plus_non_build_nodes_equals_all_nodes(self):
-        testspec = models.TestSpecification(name='all', description={})
-        all_nodes = testspec.nodes()
-        build_node = testspec.build_node()
-        non_build_nodes = testspec.non_build_nodes()
+    def test_job_build_node_plus_non_build_nodes_equals_all_nodes(self):
+        job = models.Job(description={})
+        all_nodes = job.nodes()
+        build_node = job.build_node()
+        non_build_nodes = job.non_build_nodes()
         self.assertEquals(set(all_nodes), set([build_node] + non_build_nodes))
 
-    def test_testspec_build_node_and_control_node_not_in_compute_nodes(self):
-        testspec = models.TestSpecification(name='all', description={})
-        build_node = testspec.build_node()
-        control_node = testspec.control_node()
-        compute_nodes = testspec.compute_nodes()
+    def test_job_build_node_and_control_node_not_in_compute_nodes(self):
+        job = models.Job(description={})
+        build_node = job.build_node()
+        control_node = job.control_node()
+        compute_nodes = job.compute_nodes()
         self.assertNotIn(build_node, compute_nodes)
         self.assertNotIn(control_node, compute_nodes)
 
-    def test_testspec_dhcp_low_and_high(self):
-        testspec = models.TestSpecification(name='all', description={})
+    def test_job_dhcp_low_and_high(self):
+        job = models.Job(description={})
 
-        self.assertEquals(testspec.dhcp_low(), '10.10.4.1')
-        self.assertEquals(testspec.dhcp_high(), '10.10.5.2')
+        self.assertEquals(job.dhcp_low(), '10.10.4.1')
+        self.assertEquals(job.dhcp_high(), '10.10.5.2')
 
         # Reverse the list
-        nodes = testspec.nodes()
+        nodes = job.nodes()
         nodes.reverse()
-        testspec.nodes = lambda: nodes
-        self.assertEquals(testspec.dhcp_low(), '10.10.4.1')
-        self.assertEquals(testspec.dhcp_high(), '10.10.5.2')
+        job.nodes = lambda: nodes
+        self.assertEquals(job.dhcp_low(), '10.10.4.1')
+        self.assertEquals(job.dhcp_high(), '10.10.5.2')
 
-    def test_testspec_logging(self):
-        testspec = models.TestSpecification(name='all', description={}, log_listener_port=9876)
+    def test_job_logging(self):
+        job = models.Job(description={}, log_listener_port=9876)
         with mock.patch('greenfan.models.utils.run_cmd') as run_cmd:
             run_cmd.return_value = ('1.2.3.4 dev vmnet1  src 10.30.1.1 \    cache', '')
-            self.assertEquals(testspec.logging(),
+            self.assertEquals(job.logging(),
                               {'port': 9876,
                                'host': '10.30.1.1'})
 
-    def test_testspec_json_description(self):
-        testspec = models.TestSpecification(name='all', description=[{'foo': 'bar'}, 1, "foo"])
-        self.assertEquals(testspec.json_description(),
+    def test_job_json_description(self):
+        job = models.Job(description=[{'foo': 'bar'}, 1, "foo"])
+        self.assertEquals(job.json_description(),
                           textwrap.dedent("""\
                              [
                                {
@@ -321,8 +321,18 @@ class ModelTests(TestCase):
 class CommandsTests(TestCase):
     fixtures = ['test_nodes.yaml', 'test_testspec.yaml']
 
+    def test_create_job_from_testspec(self):
+        out = StringIO()
+        management.call_command('create-job-from-testspec', '1', stdout=out)
+        self.assertEquals(out.getvalue()[:12], 'Created job ')
+
+        # Check that the rest is a valid integer
+        int(out.getvalue()[12:])
+
     def test_reboot_non_build_nodes(self):
         from fabric.api import env as fabric_env
+
+        job = models.TestSpecification.objects.get(pk=1).create_job()
 
         expected_calls = [
                     'cobbler system find --netboot-enabled=true',
@@ -339,7 +349,7 @@ class CommandsTests(TestCase):
 
         with mock.patch('greenfan.models.sudo', side_effect=faked_responses) as sudo:
             with mock.patch('greenfan.models.sleep') as sleep:
-                management.call_command('reboot-non-build-nodes', '1')
+                management.call_command('reboot-non-build-nodes', '%s' % job.id)
 
                 for call in expected_calls:
                     sudo.assert_any_call(call)

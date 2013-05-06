@@ -1,14 +1,16 @@
 import os
+import os.path
 import random
 import string
 
 DEBUG = True
 
+db = os.path.join(os.getcwd(), 'testdb.sqlite')
+
 DATABASES = {
   'default': {
     'ENGINE': 'django.db.backends.sqlite3',
-    'NAME': ':memory:',
-    'TEST_NAME': ':memory:',
+    'NAME': db,
   },
 }
 
@@ -25,10 +27,10 @@ INSTALLED_APPS = (
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     'greenfan',
+    'south'
 )
 
 TEST_RUNNER = 'django.test.simple.DjangoTestSuiteRunner'
 
 PASSWORD_HASHERS = ('django.contrib.auth.hashers.MD5PasswordHasher',)
 TIMEZONE = 'UTC'
-JOB_LOG_DIR = '/path/to/logs'

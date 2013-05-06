@@ -26,7 +26,7 @@ from subprocess import Popen, PIPE
 from django.core.management.base import BaseCommand
 from django.template.loader import render_to_string
 
-from greenfan.models import TestSpecification
+from greenfan.models import Job
 
 
 def run_cmd(args, capture_stdout=True):
@@ -38,48 +38,42 @@ def run_cmd(args, capture_stdout=True):
     return proc.communicate()
 
 
+def find_free_udp_port(start_port, end_port):
+    ports_in_use = set()
+    stdout, stderr = run_cmd(['netstat', '-lun'])
+    for l in stdout.split('\n')[2:]:
+        parts = re.split('\s+', l, 4)
+        if len(parts) != 5:
+            continue
+        _, __, ___, local, ____ = parts
+        port = local.split(':')[-1]
+        ports_in_use.add(int(port))
+
+    for port in range(59000, 60000):
+        if port not in ports_in_use:
+            return port
+
+    return None
+
+
 class Command(BaseCommand):
     def handle(self, job_id, **options):
         try:
-            job = TestSpecification.objects.get(id=job_id)
+            job = Job.objects.get(id=job_id)
 
-            ports_in_use = set()
-            stdout, stderr = run_cmd(['netstat', '-lun'])
-            for l in stdout.split('\n')[2:]:
-                parts = re.split('\s+', l, 4)
-                if len(parts) != 5:
-                    continue
-                _, __, ___, local, ____ = parts
-                port = local.split(':')[-1]
-                ports_in_use.add(int(port))
+            job.log_listener_port = find_free_udp_port()
 
-            for port in range(59000, 60000):
-                if port not in ports_in_use:
-                     break
-
-            job.log_listener_port = port
-
-            tmpdir = tempfile.mkdtemp()
-            rsyslog_conf_file = os.path.join(tmpdir, 'rsyslog.conf')
-            rsyslog_log_file = os.path.join(tmpdir, 'logfile')
-            rsyslog_pid_file = os.path.join(tmpdir, 'pid')
-            tail_pid_file = os.path.join(tmpdir, 'tail.pid')
+            rsyslog_conf_file = os.path.join(job.logdir, 'rsyslog.conf')
+            rsyslog_log_file = os.path.join(job.logdir, 'logfile')
+            rsyslog_pid_file = os.path.join(job.logdir, 'pid')
 
             with open(rsyslog_conf_file, 'w') as fp:
                 fp.write(render_to_string('rsyslog.conf',
-                                          {'port': port,
+                                          {'port': job.log_listener_port,
                                            'logfile': rsyslog_log_file}))
 
             Popen(['/usr/sbin/rsyslogd', '-c5', '-f', rsyslog_conf_file, '-i', rsyslog_pid_file])
-            job.log_listener_dir = tmpdir
 
-            # Let rsyslog start and create the file
-            time.sleep(1)
-            proc = Popen(['tail', '-f', rsyslog_log_file])
-
-            with open(tail_pid_file, 'w') as fp:
-                fp.write(str(proc.pid))
-            
             job.save()
         finally:
             pass

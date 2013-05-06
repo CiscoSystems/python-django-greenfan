@@ -24,7 +24,7 @@ from fabric.api import env as fabric_env
 from fabric.api import run, local, sudo
 from fabric.exceptions import NetworkError
 
-from greenfan.models import Configuration, TestSpecification, Server
+from greenfan.models import Configuration, Job, Server
 
 def run_cmd(args):
     proc = Popen(args, stdout=PIPE, stderr=STDOUT)
@@ -33,7 +33,7 @@ def run_cmd(args):
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
-        job = TestSpecification.objects.get(id=job_id)
+        job = Job.objects.get(id=job_id)
         config = Configuration.get()
 
         def wait_for_ubuntu_install_to_finish():
