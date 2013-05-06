@@ -45,6 +45,7 @@ class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
         config = Configuration.get()
+        job.redirect_output()
 
         print 'General config: '
         print 'Subnet      :', config.subnet

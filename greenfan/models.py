@@ -17,6 +17,7 @@
 #
 from crypt import crypt
 import json
+import os
 import os.path
 import random
 import string
@@ -140,6 +141,14 @@ class Job(models.Model):
     def json_description(self):
         return json.dumps(self.description, indent=2)
 
+    def logfile(self):
+        return '%s/logfile' % self.log_listener_dir
+
+    def redirect_output(self):
+        fp = open(self.logfile(), 'a+')
+        os.dup2(fp.fileno(), 1)
+        os.dup2(fp.fileno(), 2)
+        
     def logging(self):
         return {'host': utils.src_ip(self.build_node().ip),
                 'port': self.log_listener_port}

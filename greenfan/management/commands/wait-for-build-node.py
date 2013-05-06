@@ -35,6 +35,7 @@ class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
         config = Configuration.get()
+        job.redirect_output()
 
         def wait_for_ubuntu_install_to_finish():
             timeout = time() + 60*25

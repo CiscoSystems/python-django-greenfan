@@ -39,6 +39,7 @@ class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
         config = Configuration.get()
+        job.redirect_output()
 
         fabric_env.host_string = '%s@%s' % (config.admin_user, job.control_node().ip)
         fabric_env.password = config.admin_password

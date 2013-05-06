@@ -17,7 +17,7 @@
 #
 import os
 import os.path
-from subprocess import Popen
+from subprocess import Popen, PIPE, STDOUT
 import sys
 from time import sleep 
 
@@ -27,15 +27,15 @@ from greenfan import utils
 from greenfan.models import Configuration, Job, Server
 
 def run_cmd(args):
-    print args
     sys.stdout.flush()
-    proc = Popen(args)
+    proc = Popen(args, stdout=PIPE, stderr=STDOUT)
     return proc.communicate()
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
         config = Configuration.get()
+        job.redirect_output()
 
         preseed_path = os.path.join(os.getcwd(), 'preseeds', 'build-node.preseed')
 
