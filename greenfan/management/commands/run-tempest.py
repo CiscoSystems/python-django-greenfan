@@ -73,6 +73,12 @@ class Command(BaseCommand):
                                                       'tenant_name': admin_user['tenant'],
                                                       'password': admin_user['password']}
         tempest_default_overrides['compute-admin'] = tempest_default_overrides['identity-admin']
+        tempest_default_overrides['compute'] = {}
+        tempest_default_overrides['compute']['create_image_enabled'] = 'false'
+        tempest_default_overrides['compute']['resize_available'] = 'false'
+        tempest_default_overrides['compute']['change_password_available'] = 'false'
+        tempest_default_overrides['compute']['whitebox_enabled'] = 'false'
+        tempest_default_overrides['network']['api_version'] = '2.0'
         
         glance = get_glance_connection(username=non_priv_user1['name'],
                                        password=non_priv_user1['password'],
@@ -85,8 +91,8 @@ class Command(BaseCommand):
 
         tempest_default_overrides['ALL']['image_ref'] = image.id
         tempest_default_overrides['ALL']['image_ref_alt'] = image.id
-        sudo('apt-get -y install git python-unittest2')
-        run('git clone https://github.com/CiscoSystems/tempest')
+        sudo('apt-get -y install git python-unittest2 python-testtools python-testresources')
+        run('git clone -b stable/folsom https://github.com/CiscoSystems/tempest')
       
         conf_sample = StringIO()
         get('tempest/etc/tempest.conf.sample', conf_sample)
@@ -110,7 +116,7 @@ class Command(BaseCommand):
             out += "%s\n" % (l,)
 
         put(StringIO(out), 'tempest/etc/tempest.conf')
-        run('cd tempest ; nosetests -v tempest')
+        run("cd tempest ; nosetests -v -a '!whitebox' tempest")
 
 #        glance_user = job.description['users'][0]
 #        env_string = 'OS_AUTH_URL=http://%s:5000/v2.0 OS_TENANT_NAME=%s OS_USERNAME=%s OS_PASSWORD=%s ' % (job.control_node().ip, glance_user['tenant'], glance_user['name'], glance_user['password'])
