@@ -168,6 +168,18 @@ class Job(models.Model):
         fabric_env.abort_on_prompts = True
         fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
 
+    def _configure_fabric_for_control_node(self):
+        config = Configuration.get()
+
+        self._configure_fabric(config.admin_user, self.control_node().ip,
+                               config.admin_password)
+
+    def _configure_fabric_for_build_node(self):
+        config = Configuration.get()
+
+        self._configure_fabric(config.admin_user, self.build_node().ip,
+                               config.admin_password)
+
     def reboot_non_build_nodes(self):
         self._configure_fabric_for_build_node()
 
@@ -222,17 +234,6 @@ class Job(models.Model):
         sudo('puppet agent -t || true')
         sudo("grep -q -- fence.*-z /etc/cobbler/power/power_ucs.template || sed -e '/fence/ s/$/ -z/' -i /etc/cobbler/power/power_ucs.template")
 
-    def _configure_fabric_for_control_node(self):
-        config = Configuration.get()
-
-        self._configure_fabric(config.admin_user, self.control_node().ip,
-                               config.admin_password)
-
-    def _configure_fabric_for_build_node(self):
-        config = Configuration.get()
-
-        self._configure_fabric(config.admin_user, self.build_node().ip,
-                               config.admin_password)
 
 class Configuration(models.Model):
     subnet = models.IPAddressField()
