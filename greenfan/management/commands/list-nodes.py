@@ -58,8 +58,7 @@ class Command(BaseCommand):
         print 'Admin user  :', config.admin_user
         print 'Admin passwd:', config.admin_password
         print
-        print 'Test specification details:'
-        print 'Name          :', job.name
+        print 'Job details:'
         print 'Ubuntu version:', job.description['ubuntu_series']
         if 'manifest' in job.description:
             print 'Manifest    :'
