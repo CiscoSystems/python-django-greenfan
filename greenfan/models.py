@@ -153,6 +153,11 @@ class Job(models.Model):
         return {'host': utils.src_ip(self.build_node().ip),
                 'port': self.log_listener_port}
 
+    def save(self):
+        super(Job, self).save()
+        if not os.path.exists(self.logdir):
+            os.mkdir(self.logdir)
+
     def _get_nodes_still_installing(self):
         out = sudo('cobbler system find --netboot-enabled=true')
         nodes = out.split('\n')
