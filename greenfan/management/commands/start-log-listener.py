@@ -49,7 +49,7 @@ def find_free_udp_port(start_port, end_port):
         port = local.split(':')[-1]
         ports_in_use.add(int(port))
 
-    for port in range(59000, 60000):
+    for port in range(start_port, end_port):
         if port not in ports_in_use:
             return port
 
@@ -61,7 +61,7 @@ class Command(BaseCommand):
         try:
             job = Job.objects.get(id=job_id)
 
-            job.log_listener_port = find_free_udp_port()
+            job.log_listener_port = find_free_udp_port(59000, 60000)
 
             rsyslog_conf_file = os.path.join(job.logdir, 'rsyslog.conf')
             rsyslog_log_file = os.path.join(job.logdir, 'logfile')
