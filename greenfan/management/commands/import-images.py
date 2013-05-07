@@ -15,40 +15,13 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
-import tempfile
-import urlparse
-
-from subprocess import Popen
-from time import sleep, time
-
 from django.core.management.base import BaseCommand
-from django.template import Context, Template
-from fabric.api import env as fabric_env
-from fabric.api import run, local, sudo, put
 
+from greenfan.models import Job
 
-
-from greenfan import utils
-from greenfan.models import Configuration, Job, Server
-
-def run_cmd(args):
-    proc = Popen(args)
-    return proc.communicate()
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
-        config = Configuration.get()
         job.redirect_output()
-
-        fabric_env.host_string = '%s@%s' % (config.admin_user, job.control_node().ip)
-        fabric_env.password = config.admin_password
-        fabric_env.abort_on_prompts = True
-        fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
- 
-        glance_user = job.description['users'][0]
-        env_string = 'OS_AUTH_URL=http://%s:5000/v2.0 OS_TENANT_NAME=%s OS_USERNAME=%s OS_PASSWORD=%s ' % (job.control_node().ip, glance_user['tenant'], glance_user['name'], glance_user['password'])
-        for image in job.description.get('images', []):
-            glance_cmd = env_string + 'glance image-create --name "%s" --is-public true --container-format %s --disk-format %s --copy-from %s' % (image['name'], image.get('container_format', 'bare'), image.get('disk-format', 'raw'), image['url'])
-            run(glance_cmd)
-
+        job.import_images()

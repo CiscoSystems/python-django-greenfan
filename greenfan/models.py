@@ -21,13 +21,15 @@ import os
 import os.path
 import random
 import string
+import tempfile
+import urlparse
 from time import sleep
 import IPy
 
 from django.db import models
 from django.conf import settings
 from fabric.api import env as fabric_env
-from fabric.api import sudo
+from fabric.api import run, sudo, put
 from jsonfield import JSONField
 
 from greenfan import utils
@@ -145,7 +147,7 @@ class Job(models.Model):
         fp = open(self.rsyslog_log_file, 'a+')
         os.dup2(fp.fileno(), 1)
         os.dup2(fp.fileno(), 2)
-        
+
     def logging(self):
         return {'host': utils.src_ip(self.build_node().ip),
                 'port': self.log_listener_port}
@@ -160,14 +162,14 @@ class Job(models.Model):
         nodes = out.split('\n')
         return  map(lambda x: x.strip(), nodes)
 
-    def reboot_non_build_nodes(self):
-        config = Configuration.get()
-
-        fabric_env.host_string = '%s@%s' % (config.admin_user,
-                                            self.build_node().ip)
-        fabric_env.password = config.admin_password
+    def _configure_fabric(self, user, host, password):
+        fabric_env.host_string = '%s@%s' % (user, host)
+        fabric_env.password = password
         fabric_env.abort_on_prompts = True
         fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
+
+    def reboot_non_build_nodes(self):
+        self._configure_fabric_for_build_node()
 
         nodes = self._get_nodes_still_installing()
         for node in nodes:
@@ -175,6 +177,62 @@ class Job(models.Model):
         sleep(5)
         for node in nodes:
             sudo('timeout 10 cobbler system poweron --name=%s' % (node,))
+
+    def image_images(self):
+        self._configure_fabric_for_control_node()
+
+        glance_user = self.description['users'][0]
+        env_string = 'OS_AUTH_URL=http://%s:5000/v2.0 OS_TENANT_NAME=%s OS_USERNAME=%s OS_PASSWORD=%s ' % (self.control_node().ip, glance_user['tenant'], glance_user['name'], glance_user['password'])
+        for image in self.description.get('images', []):
+            glance_cmd = env_string + 'glance image-create --name "%s" --is-public true --container-format %s --disk-format %s --copy-from %s' % (image['name'], image.get('container_format', 'bare'), image.get('disk-format', 'raw'), image['url'])
+            run(glance_cmd)
+
+    def install_and_configure_puppet(self):
+        self._configure_fabric_for_build_node()
+
+        if 'manifest' in self.description:
+            manifest_dir = utils.build_manifest_dir(self.description['manifest'],
+                                                   {'job': self,
+                                                    'config': Configuration.get(),
+                                                    'nodes': self.nodes()})
+            utils.put_recursive(manifest_dir, self.description['manifest'].get('destdir', '/etc/puppet/manifests'))
+
+        for archive in self.description['archives']:
+            sudo('apt-get install -y python-software-properties')
+            sudo('add-apt-repository "%s"' % (archive['line'],))
+            if 'key_data' in archive:
+                with tempfile.NamedTemporaryFile() as tmpfile:
+                    remote_name = '%s.key' % (archive['name'],)
+                    tmpfile.write(archive['key_data'])
+                    tmpfile.flush()
+                    put(tmpfile.name, remote_name)
+                    sudo('apt-key add %s' % (remote_name,))
+            elif 'key_id' in archive:
+                sudo('apt-key adv --keyserver keyserver.ubuntu.com --recv-keys %s' % (archive['key_id'],))
+            if archive.get('proxy', False):
+                parts = archive['line'].split(' ')
+                if parts[0] == 'deb':
+                    parsed_url = urlparse.urlparse(parts[1])
+                    host = parsed_url.hostname
+                    sudo('echo \'Acquire::http::Proxy::%s "%s";\' > /etc/apt/apt.conf.d/99proxy-%s.conf' % (host, archive['proxy'], archive['name']))
+
+        sudo('apt-get update')
+        sudo('apt-get install -y puppet-openstack-cisco')
+        sudo('puppet apply /etc/puppet/manifests/site.pp')
+        sudo('puppet agent -t || true')
+        sudo("grep -q -- fence.*-z /etc/cobbler/power/power_ucs.template || sed -e '/fence/ s/$/ -z/' -i /etc/cobbler/power/power_ucs.template")
+
+    def _configure_fabric_for_control_node(self):
+        config = Configuration.get()
+
+        self._configure_fabric(config.admin_user, self.control_node().ip,
+                               config.admin_password)
+
+    def _configure_fabric_for_build_node(self):
+        config = Configuration.get()
+
+        self._configure_fabric(config.admin_user, self.build_node().ip,
+                               config.admin_password)
 
 class Configuration(models.Model):
     subnet = models.IPAddressField()

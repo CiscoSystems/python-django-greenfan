@@ -19,17 +19,19 @@ import os
 import os.path
 from subprocess import Popen, PIPE, STDOUT
 import sys
-from time import sleep 
+from time import sleep
 
 from django.core.management.base import BaseCommand
 from django.template.loader import render_to_string
 from greenfan import utils
-from greenfan.models import Configuration, Job, Server
+from greenfan.models import Configuration, Job
+
 
 def run_cmd(args):
     sys.stdout.flush()
     proc = Popen(args, stdout=PIPE, stderr=STDOUT)
     return proc.communicate()
+
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
@@ -73,7 +75,7 @@ class Command(BaseCommand):
                                                                     config.netmask,
                                                                     config.gateway,
                                                                     config.ntp_server(),
-                                                                    job.build_node().hardware_profile.description['boot_disk']), 
+                                                                    job.build_node().hardware_profile.description['boot_disk']),
                                 '--power-user=%s' % (job.build_node().power_user,),
                                 '--power-address=%s' % (job.build_node().power_address,),
                                 '--power-pass=%s' % (job.build_node().power_password,),
@@ -83,5 +85,5 @@ class Command(BaseCommand):
         run_cmd(['sudo', 'cobbler', 'system', 'edit', '--name=%s' % (job.build_node().name,), '--netboot-enabled=true'])
         run_cmd(['sudo', 'cobbler', 'sync'])
         run_cmd(['sudo', 'cobbler', 'system', 'poweroff', '--name=%s' % (job.build_node().name,)])
-	sleep(5)        
+        sleep(5)
         run_cmd(['sudo', 'cobbler', 'system', 'poweron', '--name=%s' % (job.build_node().name,)])
