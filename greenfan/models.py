@@ -190,7 +190,7 @@ class Job(models.Model):
         for node in nodes:
             sudo('timeout 10 cobbler system poweron --name=%s' % (node,))
 
-    def image_images(self):
+    def import_images(self):
         self._configure_fabric_for_control_node()
 
         glance_user = self.description['users'][0]
