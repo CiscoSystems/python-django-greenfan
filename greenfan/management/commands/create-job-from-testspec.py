@@ -25,4 +25,4 @@ class Command(BaseCommand):
         ts = TestSpecification.objects.get(id=ts_id)
         job = ts.create_job()
 
-        return 'Created job %r' % job.pk
+        return 'Created job %d' % job.pk
