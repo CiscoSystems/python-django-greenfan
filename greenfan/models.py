@@ -141,11 +141,8 @@ class Job(models.Model):
     def json_description(self):
         return json.dumps(self.description, indent=2)
 
-    def logfile(self):
-        return '%s/logfile' % self.log_listener_dir
-
     def redirect_output(self):
-        fp = open(self.logfile(), 'a+')
+        fp = open(self.rsyslog_log_file, 'a+')
         os.dup2(fp.fileno(), 1)
         os.dup2(fp.fileno(), 2)
         
