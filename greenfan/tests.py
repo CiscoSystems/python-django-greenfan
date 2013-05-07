@@ -153,11 +153,13 @@ class ModelTests(TestCase):
         self.assertEquals(node.fqdn(), 'pod4node1.example.com')
 
     def _test_nodeset(self, nodesspec, expected_servers):
-        description = {}
+        description = {'num_nodes': 4}
         if nodesspec:
             description['nodes'] = nodesspec
 
         job = models.Job(description=description)
+        job.save()
+        job.reserve_nodes()
 
         self.assertEquals(set(node.name for node in job.nodes()),
                           set(expected_servers))
@@ -178,16 +180,22 @@ class ModelTests(TestCase):
 
     def test_job_build_node_not_control_node(self):
         job = models.Job(description={})
+        job.save()
+        job.reserve_nodes()
         self.assertNotEquals(job.build_node(), job.control_node())
 
     def test_job_build_node_not_in_non_build_nodes(self):
         job = models.Job(description={})
+        job.save()
+        job.reserve_nodes()
         build_node = job.build_node()
         non_build_nodes = job.non_build_nodes()
         self.assertNotIn(build_node, non_build_nodes)
 
     def test_job_build_node_plus_non_build_nodes_equals_all_nodes(self):
         job = models.Job(description={})
+        job.save()
+        job.reserve_nodes()
         all_nodes = job.nodes()
         build_node = job.build_node()
         non_build_nodes = job.non_build_nodes()
@@ -195,27 +203,41 @@ class ModelTests(TestCase):
 
     def test_job_build_node_and_control_node_not_in_compute_nodes(self):
         job = models.Job(description={})
+        job.save()
+        job.reserve_nodes()
         build_node = job.build_node()
         control_node = job.control_node()
         compute_nodes = job.compute_nodes()
         self.assertNotIn(build_node, compute_nodes)
         self.assertNotIn(control_node, compute_nodes)
 
+    def test_reserve_release_nodes(self):
+        job = models.Job(description={})
+        job.save()
+        job.reserve_nodes()
+        self.assertEquals(models.Server.objects.filter(job=job).count(), 3)
+        job.release_nodes()
+        self.assertEquals(models.Server.objects.filter(job=job).count(), 0)
+
     def test_job_dhcp_low_and_high(self):
         job = models.Job(description={})
+        job.save()
+        job.reserve_nodes()
 
         self.assertEquals(job.dhcp_low(), '10.10.4.1')
-        self.assertEquals(job.dhcp_high(), '10.10.5.2')
+        self.assertEquals(job.dhcp_high(), '10.10.5.1')
 
         # Reverse the list
         nodes = job.nodes()
         nodes.reverse()
         job.nodes = lambda: nodes
         self.assertEquals(job.dhcp_low(), '10.10.4.1')
-        self.assertEquals(job.dhcp_high(), '10.10.5.2')
+        self.assertEquals(job.dhcp_high(), '10.10.5.1')
 
     def test_job_logging(self):
         job = models.Job(description={}, log_listener_port=9876)
+        job.save()
+        job.reserve_nodes()
         with mock.patch('greenfan.models.utils.run_cmd') as run_cmd:
             run_cmd.return_value = ('1.2.3.4 dev vmnet1  src 10.30.1.1 \    cache', '')
             self.assertEquals(job.logging(),
@@ -333,6 +355,7 @@ class CommandsTests(TestCase):
         from fabric.api import env as fabric_env
 
         job = models.TestSpecification.objects.get(pk=1).create_job()
+        job.reserve_nodes()
 
         expected_calls = [
                     'cobbler system find --netboot-enabled=true',

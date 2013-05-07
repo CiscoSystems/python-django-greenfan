@@ -1,3 +1,4 @@
+import pdb
 #
 #   Copyright 2012 Cisco Systems, Inc.
 #
@@ -82,8 +83,8 @@ class Job(models.Model):
             step('stop-log-listener')
             step('turn-off-non-build-nodes')
 
-    def nodes_qs(self):
-        qs = Server.objects.exclude(disabled=True)
+    def available_nodes_qs(self):
+        qs = Server.objects.exclude(disabled=True, job=None)
         if 'nodes' in self.description:
             nodes = self.description['nodes']
             if 'include' in nodes:
@@ -116,7 +117,31 @@ class Job(models.Model):
         return os.path.join(self.logdir, 'rsyslog.pid')
 
     def nodes(self):
-        return list(self.nodes_qs())
+        return list(Server.objects.filter(job=self))
+
+    def reserve_nodes(self):
+        if self.pk is None:
+            raise Exception("Can't reserve nodes before job has been .save()d")
+
+        num_nodes = self.description.get('num_nodes', 3)
+        for x in range(10):
+            # Pick out three that we want
+            node_set = self.available_nodes_qs()[:num_nodes]
+
+            # Attempt to assign them to this job
+            matches = self.available_nodes_qs().filter(pk__in=[n.pk for n in node_set]).update(job=self)
+
+            # This happens if someone else managed to grab the nodes
+            # before we did.
+            if matches != len(node_set):
+                # If this happens, we release them again and start over
+                self.release_nodes()
+            else:
+                return
+        raise Exception('Could not find sufficient available nodes')
+
+    def release_nodes(self):
+        Server.objects.filter(job=self).update(job=None)
 
     def build_node(self):
         return self.nodes()[0]
@@ -144,6 +169,8 @@ class Job(models.Model):
         return json.dumps(self.description, indent=2)
 
     def redirect_output(self):
+        if settings.TESTING:
+            return
         fp = open(self.rsyslog_log_file, 'a+')
         os.dup2(fp.fileno(), 1)
         os.dup2(fp.fileno(), 2)
@@ -154,7 +181,7 @@ class Job(models.Model):
 
     def save(self):
         super(Job, self).save()
-        if not os.path.exists(self.logdir):
+        if not settings.TESTING and not os.path.exists(self.logdir):
             os.mkdir(self.logdir)
 
     def _get_nodes_still_installing(self):
@@ -336,6 +363,7 @@ class Server(models.Model):
     hardware_profile = models.ForeignKey(HardwareProfile)
     disabled = models.BooleanField(default=False)
 #    disabled_reason = models.CharField(max_length=200, null=True)
+    job = models.ForeignKey(Job, blank=True, null=True)
 
     def __unicode__(self):
         return self.name

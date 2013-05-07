@@ -32,3 +32,4 @@ TEST_RUNNER = 'django.test.simple.DjangoTestSuiteRunner'
 PASSWORD_HASHERS = ('django.contrib.auth.hashers.MD5PasswordHasher',)
 TIMEZONE = 'UTC'
 JOB_LOG_DIR = '/path/to/logs'
+TESTING = True
