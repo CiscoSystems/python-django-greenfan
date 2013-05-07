@@ -79,6 +79,7 @@ class Command(BaseCommand):
         tempest_default_overrides['compute']['resize_available'] = 'false'
         tempest_default_overrides['compute']['change_password_available'] = 'false'
         tempest_default_overrides['compute']['whitebox_enabled'] = 'false'
+        tempest_default_overrides['network'] = {}
         tempest_default_overrides['network']['api_version'] = '2.0'
         
         glance = get_glance_connection(username=non_priv_user1['name'],
