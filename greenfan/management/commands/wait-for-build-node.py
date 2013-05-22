@@ -71,4 +71,4 @@ class Command(BaseCommand):
         fabric_env.abort_on_prompts = True
                
         if not wait_for_ssh_to_become_available():
-            return False
+            raise Exception('Build node never finished')
