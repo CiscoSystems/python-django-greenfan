@@ -29,7 +29,7 @@ from greenfan.models import Configuration, Job
 
 def run_cmd(args):
     sys.stdout.flush()
-    proc = Popen(args, stdout=PIPE, stderr=STDOUT)
+    proc = Popen(args)
     return proc.communicate()
 
 
