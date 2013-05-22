@@ -37,4 +37,4 @@ class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
         job.redirect_output()
-        job.install_and_configure_puppet
+        job.install_and_configure_puppet()
