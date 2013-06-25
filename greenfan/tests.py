@@ -217,7 +217,7 @@ class ModelTests(TestCase):
         job.reserve_nodes()
         self.assertEquals(models.Server.objects.filter(job=job).count(), 3)
         job.release_nodes()
-        self.assertEquals(models.Server.objects.filter(job=job).count(), 0)
+        self.assertEquals(models.Server.objects.filter(job=job).count(), )
 
     def test_job_dhcp_low_and_high(self):
         job = models.Job(description={})

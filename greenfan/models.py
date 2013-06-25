@@ -32,6 +32,7 @@ from django.conf import settings
 from fabric.api import env as fabric_env
 from fabric.api import run, sudo, put
 from jsonfield import JSONField
+from cloudslave import models as cloudslave_models
 
 from greenfan import utils
 
@@ -44,6 +45,105 @@ class TestSpecification(models.Model):
         job = Job(description=self.description)
         job.save()
         return job
+
+
+class Node(object):
+    pass
+
+
+class VirtualNode(Node):
+    def __init__(self, slave):
+        self.slave = slave
+
+    @property
+    def ip(self):
+        return self.slave.ip()
+
+
+class PhysicalNode(Node):
+    def __init__(self, server):
+        self.server = server
+
+    @property
+    def ip(self):
+        return self.server.ip
+
+
+class NodeScheduler(object):
+    def __init__(self, job):
+        self.job = job
+
+class PhysicalNodeScheduler(NodeScheduler):
+    def _available_nodes_qs(self):
+        ### FIXME: This should probably be two .exclude()s
+        qs = Server.objects.exclude(disabled=True, job=None)
+        if 'nodes' in self.job.description:
+            nodes = self.job.description['nodes']
+            if 'include' in nodes:
+                include = nodes['include']
+                if isinstance(include, basestring):
+                    include = [include]
+                qs = qs.filter(hardware_profile__tags__in=include)
+            if 'exclude' in nodes:
+                exclude = nodes['exclude']
+                if isinstance(exclude, basestring):
+                    exclude = [exclude]
+                qs = qs.exclude(hardware_profile__tags__in=exclude)
+
+        return qs
+
+    def reserve_nodes(self):
+        if job.pk is None:
+            raise Exception("Can't reserve nodes before job has been .save()d")
+
+        num_nodes = self.job.description.get('num_nodes', 3)
+        for x in range(10):
+            # Pick out three that we want
+            node_set = self._available_nodes_qs()[:num_nodes]
+
+            # Attempt to assign them to this job
+            matches = self._available_nodes_qs().filter(pk__in=[n.pk for n in node_set]).update(job=self.job)
+
+            # .update returns number of matched nodes.
+            # Since we filter by availability (by way of accessing the
+            # .available_nodes_qs) and pass the specific set of nodes we
+            # wanted, getting a different number of matches nodes means
+            # someone else grabbed one of our nodes.
+            if matches != len(node_set):
+                # If this happens, we release them again and start over
+                self.release_nodes()
+            else:
+                return
+        raise Exception('Could not find sufficient available nodes')
+
+    def release_nodes(self):
+        Server.objects.filter(job=self.job).update(job=None)
+
+    def nodes(self):
+        return [PhysicalNode(server) for server in Server.objects.filter(job=self.job)]
+
+
+class VirtualNodeScheduler(NodeScheduler):
+    def reserve_nodes(self):
+        if self.job.pk is None:
+            raise Exception("Can't reserve nodes before job has been .save()d")
+
+        if ('include' in self.job.description['nodes'] or
+            'exclude' in self.job.description['nodes']:)
+            raise exc.NodeRequestNotSatisfiable("Virtual nodes requested, but specific include/exclude rules were given.")
+
+        num_nodes = self.job.description.get('num_nodes', 3)
+        cloud = cloudslave.models.Cloud.get_any()
+        self.job.cloud_slave_reservation = cloud.create_reservation(num_nodes)
+        self.job.cloud_slave_reservation.start()
+
+    def release_nodes(self):
+        self.job.cloud_slave_reservation.terminate()
+        self.job.cloud_slave_reservation.delete()
+
+    def nodes(self):
+        return [VirtualNode(slave) for slave in self.job.cloud_slave_reservation.slave_set.all()]
+
 
 class Job(models.Model):
     PENDING = 1
@@ -61,6 +161,9 @@ class Job(models.Model):
     log_listener_port = models.IntegerField(null=True, blank=True)
     state = models.SmallIntegerField(default=PENDING,
                                      choices=SERIES_STATES)
+    physical = models.BooleanField()
+    cloud_slave_reservation = models.ForeignKey(cloudslave_models.Reservation,
+                                                blank=True, null=True)
 
     def run(self):
         from django.core.management import call_command
@@ -83,23 +186,6 @@ class Job(models.Model):
             step('stop-log-listener')
             step('turn-off-non-build-nodes')
 
-    def available_nodes_qs(self):
-        qs = Server.objects.exclude(disabled=True, job=None)
-        if 'nodes' in self.description:
-            nodes = self.description['nodes']
-            if 'include' in nodes:
-                include = nodes['include']
-                if isinstance(include, basestring):
-                    include = [include]
-                qs = qs.filter(hardware_profile__tags__in=include)
-            if 'exclude' in nodes:
-                exclude = nodes['exclude']
-                if isinstance(exclude, basestring):
-                    exclude = [exclude]
-                qs = qs.exclude(hardware_profile__tags__in=exclude)
-
-        return qs
-
     @property
     def logdir(self):
         return os.path.join(settings.JOB_LOG_DIR, '%s' % self.pk)
@@ -116,32 +202,20 @@ class Job(models.Model):
     def rsyslog_pid_file(self):
         return os.path.join(self.logdir, 'rsyslog.pid')
 
+    @property
+    def scheduler(self):
+        if self.physical:
+            scheduler_class = PhysicalNodeScheduler
+        else:
+            scheduler_class = VirtualNodeScheduler
+
+        return scheduler_class(self)
+
     def nodes(self):
-        return list(Server.objects.filter(job=self))
-
-    def reserve_nodes(self):
-        if self.pk is None:
-            raise Exception("Can't reserve nodes before job has been .save()d")
-
-        num_nodes = self.description.get('num_nodes', 3)
-        for x in range(10):
-            # Pick out three that we want
-            node_set = self.available_nodes_qs()[:num_nodes]
-
-            # Attempt to assign them to this job
-            matches = self.available_nodes_qs().filter(pk__in=[n.pk for n in node_set]).update(job=self)
-
-            # This happens if someone else managed to grab the nodes
-            # before we did.
-            if matches != len(node_set):
-                # If this happens, we release them again and start over
-                self.release_nodes()
-            else:
-                return
-        raise Exception('Could not find sufficient available nodes')
+        self.scheduler.nodes()
 
     def release_nodes(self):
-        Server.objects.filter(job=self).update(job=None)
+        self.scheduler.release_nodes()
 
     def build_node(self):
         return self.nodes()[0]
