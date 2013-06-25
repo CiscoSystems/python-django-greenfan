@@ -129,7 +129,7 @@ class VirtualNodeScheduler(NodeScheduler):
             raise Exception("Can't reserve nodes before job has been .save()d")
 
         if ('include' in self.job.description['nodes'] or
-            'exclude' in self.job.description['nodes']:)
+            'exclude' in self.job.description['nodes']):
             raise exc.NodeRequestNotSatisfiable("Virtual nodes requested, but specific include/exclude rules were given.")
 
         num_nodes = self.job.description.get('num_nodes', 3)
