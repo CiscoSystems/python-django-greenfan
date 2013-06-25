@@ -7,6 +7,10 @@ from django.db import models
 
 class Migration(SchemaMigration):
 
+    depends_on = (
+        ('cloudslave', '0001_initial'),
+    )
+
     def forwards(self, orm):
         # Adding field 'Job.physical'
         db.add_column('greenfan_job', 'physical',
@@ -28,6 +32,41 @@ class Migration(SchemaMigration):
 
 
     models = {
+        'cloudslave.cloud': {
+            'Meta': {'object_name': 'Cloud'},
+            'endpoint': ('django.db.models.fields.URLField', [], {'max_length': '200'}),
+            'flavor_name': ('django.db.models.fields.CharField', [], {'max_length': '200'}),
+            'floating_ip_mode': ('django.db.models.fields.SmallIntegerField', [], {'default': '0'}),
+            'image_name': ('django.db.models.fields.CharField', [], {'max_length': '200'}),
+            'name': ('django.db.models.fields.CharField', [], {'max_length': '200', 'primary_key': 'True'}),
+            'password': ('django.db.models.fields.CharField', [], {'max_length': '200'}),
+            'region': ('django.db.models.fields.CharField', [], {'max_length': '200', 'blank': 'True'}),
+            'tenant_name': ('django.db.models.fields.CharField', [], {'max_length': '200'}),
+            'user_name': ('django.db.models.fields.CharField', [], {'max_length': '200'})
+        },
+        'cloudslave.keypair': {
+            'Meta': {'unique_together': "(('cloud', 'name'),)", 'object_name': 'KeyPair'},
+            'cloud': ('django.db.models.fields.related.ForeignKey', [], {'to': "orm['cloudslave.Cloud']"}),
+            'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'name': ('django.db.models.fields.CharField', [], {'max_length': '200'}),
+            'private_key': ('django.db.models.fields.TextField', [], {}),
+            'public_key': ('django.db.models.fields.TextField', [], {})
+        },
+        'cloudslave.reservation': {
+            'Meta': {'object_name': 'Reservation'},
+            'cloud': ('django.db.models.fields.related.ForeignKey', [], {'to': "orm['cloudslave.Cloud']"}),
+            'id': ('django.db.models.fields.AutoField', [], {'primary_key': 'True'}),
+            'number_of_slaves': ('django.db.models.fields.IntegerField', [], {}),
+            'state': ('django.db.models.fields.SmallIntegerField', [], {'default': '0'}),
+            'timeout': ('django.db.models.fields.DateTimeField', [], {})
+        },
+        'cloudslave.slave': {
+            'Meta': {'object_name': 'Slave'},
+            'cloud_node_id': ('django.db.models.fields.CharField', [], {'max_length': '200'}),
+            'name': ('django.db.models.fields.CharField', [], {'max_length': '200', 'primary_key': 'True'}),
+            'reservation': ('django.db.models.fields.related.ForeignKey', [], {'to': "orm['cloudslave.Reservation']"}),
+            'state': ('django.db.models.fields.CharField', [], {'max_length': '15', 'null': 'True', 'blank': 'True'})
+        },
         'greenfan.configuration': {
             'Meta': {'object_name': 'Configuration'},
             'admin_password': ('django.db.models.fields.CharField', [], {'max_length': '200'}),
@@ -84,4 +123,4 @@ class Migration(SchemaMigration):
         }
     }
 
-    complete_apps = ['greenfan']
+    complete_apps = ['cloudslave', 'greenfan']
