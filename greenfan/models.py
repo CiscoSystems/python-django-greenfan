@@ -56,17 +56,52 @@ class VirtualNode(Node):
         self.slave = slave
 
     @property
-    def ip(self):
-        return self.slave.ip()
+    def mac(self):
+        if self.slave.state == 'ACTIVE':
+            return self.slave.run_cmd("ip --oneline link show dev eth0 | sed -e 's%.*link/ether %%g' -e 's/ .*//g'").strip()
+        else:
+            return 'TBD'
 
+    @property
+    def internal_ip(self):
+        return self.slave.internal_ip
+
+    @property
+    def external_ip(self):
+        return self.slave.external_ip
+
+    @property
+    def name(self):
+        return self.slave.name
+
+    @property
+    def hardware_profile(self):
+        # FIXME: This logic belongs in cloudslave
+        return self.slave.reservation.cloud.client.flavors.get(self.slave.cloud_server.flavor['id']).name
+
+    @property
+    def fqdn(self):
+        return '%s.%s' % (self.name, Configuration.get().domain)
 
 class PhysicalNode(Node):
     def __init__(self, server):
         self.server = server
 
     @property
-    def ip(self):
+    def mac(self):
+        return self.server.mac
+
+    @property
+    def internal_ip(self):
         return self.server.ip
+
+    @property
+    def external_ip(self):
+        return self.server.ip
+
+    @property
+    def fqdn(self):
+        return self.server.fqdn()
 
 
 class NodeScheduler(object):

@@ -39,7 +39,7 @@ def header():
     print format_string % ('fqdn', 'IP', 'MAC', 'HW Profile', '')
 
 def describe_node(node, extra_info=''):
-    print format_string % (node.fqdn(), node.ip, node.mac, node.hardware_profile, extra_info)
+    print format_string % (node.fqdn, node.internal_ip, node.mac, node.hardware_profile, extra_info)
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
