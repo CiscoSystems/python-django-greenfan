@@ -23,6 +23,6 @@ from greenfan.models import TestSpecification
 class Command(BaseCommand):
     def handle(self, ts_id, **options):
         ts = TestSpecification.objects.get(id=ts_id)
-        job = ts.create_job()
-
+        physical = 'physical' in options
+        job = ts.create_job(physical=physical)
         return 'Created job %d' % job.pk
