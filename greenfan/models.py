@@ -1,4 +1,3 @@
-import pdb
 #
 #   Copyright 2012 Cisco Systems, Inc.
 #
@@ -41,8 +40,8 @@ class TestSpecification(models.Model):
     name = models.CharField(max_length=200)
     description = JSONField()
 
-    def create_job(self):
-        job = Job(description=self.description)
+    def create_job(self, physical=False):
+        job = Job(description=self.description, physical=physical)
         job.save()
         return job
 
@@ -163,13 +162,15 @@ class VirtualNodeScheduler(NodeScheduler):
         if self.job.pk is None:
             raise Exception("Can't reserve nodes before job has been .save()d")
 
-        if ('include' in self.job.description['nodes'] or
-            'exclude' in self.job.description['nodes']):
-            raise exc.NodeRequestNotSatisfiable("Virtual nodes requested, but specific include/exclude rules were given.")
+        if 'nodes' in self.job.description:
+            if ('include' in self.job.description['nodes'] or
+                'exclude' in self.job.description['nodes']):
+                raise exc.NodeRequestNotSatisfiable("Virtual nodes requested, but specific include/exclude rules were given.")
 
         num_nodes = self.job.description.get('num_nodes', 3)
-        cloud = cloudslave.models.Cloud.get_any()
+        cloud = cloudslave_models.Cloud.get_random()
         self.job.cloud_slave_reservation = cloud.create_reservation(num_nodes)
+        self.job.save()
         self.job.cloud_slave_reservation.start()
 
     def release_nodes(self):
@@ -247,7 +248,10 @@ class Job(models.Model):
         return scheduler_class(self)
 
     def nodes(self):
-        self.scheduler.nodes()
+        return self.scheduler.nodes()
+
+    def reserve_nodes(self):
+        self.scheduler.reserve_nodes()
 
     def release_nodes(self):
         self.scheduler.release_nodes()
@@ -266,13 +270,13 @@ class Job(models.Model):
 
     def dhcp_low(self):
         nodes = self.nodes()
-        nodes.sort(key=lambda node: int(IPy.IP(node.ip).strDec(), 10))
-        return nodes[0].ip
+        nodes.sort(key=lambda node: int(IPy.IP(node.internal_ip).strDec(), 10))
+        return nodes[0].internal_ip
 
     def dhcp_high(self):
         nodes = self.nodes()
-        nodes.sort(key=lambda node: int(IPy.IP(node.ip).strDec(), 10))
-        return nodes[-1].ip
+        nodes.sort(key=lambda node: int(IPy.IP(node.internal_ip).strDec(), 10))
+        return nodes[-1].internal_ip
 
     def json_description(self):
         return json.dumps(self.description, indent=2)
@@ -285,7 +289,7 @@ class Job(models.Model):
         os.dup2(fp.fileno(), 2)
 
     def logging(self):
-        return {'host': utils.src_ip(self.build_node().ip),
+        return {'host': utils.src_ip(self.build_node().internal_ip),
                 'port': self.log_listener_port}
 
     def save(self):
@@ -301,43 +305,57 @@ class Job(models.Model):
     def _configure_fabric(self, user, host, password):
         fabric_env.host_string = '%s@%s' % (user, host)
         fabric_env.password = password
+        fabric_env.key_filename = '/home/soren/ci/kp.key'
         fabric_env.abort_on_prompts = True
         fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
 
-    def _configure_fabric_for_control_node(self):
+    def _configure_fabric_for_node(self, node):
         config = Configuration.get()
 
-        self._configure_fabric(config.admin_user, self.control_node().ip,
+        self._configure_fabric(self.physical and config.admin_user or 'ubuntu', node.external_ip,
                                config.admin_password)
+
+    def _configure_fabric_for_control_node(self):
+        self._configure_fabric_for_node(self.control_node())
 
     def _configure_fabric_for_build_node(self):
         config = Configuration.get()
 
-        self._configure_fabric(config.admin_user, self.build_node().ip,
+        self._configure_fabric(self.physical and config.admin_user or 'ubuntu', self.build_node().external_ip,
                                config.admin_password)
 
     def reboot_non_build_nodes(self):
         self._configure_fabric_for_build_node()
 
         nodes = self._get_nodes_still_installing()
-        for node in nodes:
-            sudo('timeout 10 cobbler system poweroff --name=%s' % (node,))
-        sleep(5)
-        for node in nodes:
-            sudo('timeout 10 cobbler system poweron --name=%s' % (node,))
+        if self.physical:
+            for node in nodes:
+                sudo('timeout 10 cobbler system poweroff --name=%s' % (node,))
+            sleep(5)
+            for node in nodes:
+                sudo('timeout 10 cobbler system poweron --name=%s' % (node,))
+        else:
+            nodes = filter(lambda x:x.name.split('.')[0] in nodes, self.nodes())
+            for node in nodes:
+                self._configure_fabric_for_node(node)
+                sudo('apt-get install pxe-kexec')
+
+            print nodes
+
 
     def import_images(self):
         self._configure_fabric_for_control_node()
 
         glance_user = self.description['users'][0]
-        env_string = 'OS_AUTH_URL=http://%s:5000/v2.0 OS_TENANT_NAME=%s OS_USERNAME=%s OS_PASSWORD=%s ' % (self.control_node().ip, glance_user['tenant'], glance_user['name'], glance_user['password'])
+        env_string = 'OS_AUTH_URL=http://%s:5000/v2.0 OS_TENANT_NAME=%s OS_USERNAME=%s OS_PASSWORD=%s ' % (self.control_node().internal_ip, glance_user['tenant'], glance_user['name'], glance_user['password'])
         for image in self.description.get('images', []):
             glance_cmd = env_string + 'glance image-create --name "%s" --is-public true --container-format %s --disk-format %s --copy-from %s' % (image['name'], image.get('container_format', 'bare'), image.get('disk-format', 'raw'), image['url'])
             run(glance_cmd)
 
     def install_and_configure_puppet(self):
         self._configure_fabric_for_build_node()
-
+        build_node = self.build_node()
+        sudo('echo %s %s %s | tee --append /etc/hosts' % (build_node.internal_ip, build_node.fqdn, build_node.name))
         if 'manifest' in self.description:
             manifest_dir = utils.build_manifest_dir(self.description['manifest'],
                                                    {'job': self,
@@ -365,7 +383,7 @@ class Job(models.Model):
                     sudo('echo \'Acquire::http::Proxy::%s "%s";\' > /etc/apt/apt.conf.d/99proxy-%s.conf' % (host, archive['proxy'], archive['name']))
 
         sudo('apt-get update')
-        sudo('apt-get install -y puppet-openstack-cisco')
+        sudo('apt-get install -y openssh-server puppetmaster-passenger puppet puppet-openstack-cisco')
         sudo('puppet apply /etc/puppet/manifests/site.pp')
         sudo('puppet agent -t || true')
         sudo("grep -q -- fence.*-z /etc/cobbler/power/power_ucs.template || sed -e '/fence/ s/$/ -z/' -i /etc/cobbler/power/power_ucs.template")
