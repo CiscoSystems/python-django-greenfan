@@ -36,6 +36,8 @@ def run_cmd(args):
 class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
+        if not job.physical:
+            return ''
         config = Configuration.get()
         job.redirect_output()
 
