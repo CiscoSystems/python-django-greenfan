@@ -340,8 +340,20 @@ class Job(models.Model):
                 self._configure_fabric_for_node(node)
                 sudo('apt-get install pxe-kexec')
 
-            print nodes
+    def wait_for_non_build_nodes(self):
+        self._configure_fabric_for_build_node()
 
+        timeout = time() + 60*60
+        
+        expected_set = set([node.fqdn() for node in self.nodes()])
+        while timeout > time():
+	    out = sudo('cd /var/lib/puppet/reports ; ls | cat')
+            actual_set = set([name.strip() for name in out.split('\n')])
+            if actual_set == expected_set:
+                return ''
+            print 'Not done yet. %d seconds left' % (timeout - time(),)
+            sleep(5)
+        raise Exception('Timed out')
 
     def import_images(self):
         self._configure_fabric_for_control_node()

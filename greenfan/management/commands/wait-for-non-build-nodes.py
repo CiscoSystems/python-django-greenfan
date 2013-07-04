@@ -36,23 +36,6 @@ def run_cmd(args):
 class Command(BaseCommand):
     def handle(self, job_id, **options):
         job = Job.objects.get(id=job_id)
-        config = Configuration.get()
         job.redirect_output()
+        job.wait_for_non_build_nodes()
 
-        fabric_env.host_string = '%s@%s' % (config.admin_user, job.build_node().ip)
-        fabric_env.password = config.admin_password
-        fabric_env.abort_on_prompts = True
-        fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
- 
-        timeout = time() + 60*60
-        
-        expected_set = set([node.fqdn() for node in job.nodes()])
-        while timeout > time():
-	    out = sudo('cd /var/lib/puppet/reports ; ls | cat')
-            actual_set = set([name.strip() for name in out.split('\n')])
-            if actual_set == expected_set:
-                return ''
-            print 'Not done yet. %d seconds left' % (timeout - time(),)
-            self.stdout.flush()
-            sleep(5)
-        raise Exception('Timed out')
