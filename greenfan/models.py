@@ -47,7 +47,16 @@ class TestSpecification(models.Model):
 
 
 class Node(object):
-    pass
+    def subnet_as_sql(self):
+        if self.netmask.startswith('255.255.255'):
+            wildcards = 1
+        elif self.netmask.startswith('255.255'):
+            wildcards = 2
+        else:
+            wildcards = 3
+
+        return '%s.%s' % ('.'.join(self.subnet.split('.')[:4-wildcards]),
+                          '.'.join(['%']*wildcards))
 
 
 class VirtualNode(Node):
@@ -60,6 +69,40 @@ class VirtualNode(Node):
             return self.slave.run_cmd("ip --oneline link show dev eth0 | sed -e 's%.*link/ether %%g' -e 's/ .*//g'").strip()
         else:
             return 'TBD'
+
+    @property
+    def netmask(self):
+        ip = self.slave.run_cmd("ip --oneline addr show dev eth0 | grep inet' ' | sed -e 's%.*inet %%g' -e 's/ .*//g'").strip()
+        return IPy.IP(ip, make_net=True).netmask().strNormal()
+
+    @property
+    def subnet(self):
+        ip = self.slave.run_cmd("ip --oneline addr show dev eth0 | grep inet' ' | sed -e 's%.*inet %%g' -e 's/ .*//g'").strip()
+        return IPy.IP(ip, make_net=True).strNormal()
+
+    @property
+    def gateway(self):
+        return self.slave.run_cmd("ip --oneline route get 8.8.8.8 | sed -e 's%.* via %%g' -e 's/ .*//g'").strip()
+
+    @property
+    def power_address(self):
+        return 'fake'
+
+    @property
+    def power_type(self):
+        return 'ucs'
+
+    @property
+    def power_user(self):
+        return 'fake'
+
+    @property
+    def power_password(self):
+        return 'fake'
+
+    @property
+    def power_id(self):
+        return 'fake'
 
     @property
     def internal_ip(self):
@@ -82,6 +125,23 @@ class VirtualNode(Node):
     def fqdn(self):
         return '%s.%s' % (self.name, Configuration.get().domain)
 
+    @property
+    def admin_user(self):
+        job = self.slave.reservation.job_set.all()[0]:
+
+        # The build node does not get reinstalled
+        if self == job.build_node():
+            return 'ubuntu'
+
+        if job.steps.index(job.step) > job.steps.index('reboot-non-build-nodes'):
+            return Configuration.get().admin_user
+        else:
+            return 'ubuntu'
+
+    @property
+    def admin_password(self):
+        return Configuration.get().admin_password
+
 class PhysicalNode(Node):
     def __init__(self, server):
         self.server = server
@@ -89,6 +149,26 @@ class PhysicalNode(Node):
     @property
     def mac(self):
         return self.server.mac
+
+    @property
+    def power_address(self):
+        return server.power_address
+
+    @property
+    def power_type(self):
+        return server.power_type
+
+    @property
+    def power_user(self):
+        return server.power_user
+
+    @property
+    def power_password(self):
+        return server.power_password
+
+    @property
+    def power_id(self):
+        return server.power_id
 
     @property
     def internal_ip(self):
@@ -101,6 +181,26 @@ class PhysicalNode(Node):
     @property
     def fqdn(self):
         return self.server.fqdn()
+
+    @property
+    def subnet(self):
+        return Configuration.get().subnet
+
+    @property
+    def gateway(self):
+        return Configuration.get().gateway
+
+    @property
+    def netmask(self):
+        return Configuration.get().netmask
+
+    @property
+    def admin_user(self):
+        return Configuration.get().admin_user
+
+    @property
+    def admin_password(self):
+        return Configuration.get().admin_password
 
 
 class NodeScheduler(object):
@@ -201,10 +301,22 @@ class Job(models.Model):
     cloud_slave_reservation = models.ForeignKey(cloudslave_models.Reservation,
                                                 blank=True, null=True)
 
+    steps = ['start-log-listener'
+             'list-nodes',
+             'provision-build-node',
+             'wait-for-build-node',
+             'install-and-configure-puppet',
+             'reboot-non-build-nodes',
+             'wait-for-non-build-nodes',
+             'provision-users',
+             'import-images',
+             'run-tempest']
+
     def run(self):
         from django.core.management import call_command
 
         def step(name):
+            job.step = name
             call_command(name, '%s' % self.id)
 
         try:
@@ -310,19 +422,14 @@ class Job(models.Model):
         fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
 
     def _configure_fabric_for_node(self, node):
-        config = Configuration.get()
-
-        self._configure_fabric(self.physical and config.admin_user or 'ubuntu', node.external_ip,
-                               config.admin_password)
+        self._configure_fabric(node.admin_user, node.external_ip,
+                               node.admin_password)
 
     def _configure_fabric_for_control_node(self):
         self._configure_fabric_for_node(self.control_node())
 
     def _configure_fabric_for_build_node(self):
-        config = Configuration.get()
-
-        self._configure_fabric(self.physical and config.admin_user or 'ubuntu', self.build_node().external_ip,
-                               config.admin_password)
+        self._configure_fabric_for_node(self.build_node())
 
     def reboot_non_build_nodes(self):
         self._configure_fabric_for_build_node()
@@ -337,8 +444,10 @@ class Job(models.Model):
         else:
             nodes = filter(lambda x:x.name.split('.')[0] in nodes, self.nodes())
             for node in nodes:
-                self._configure_fabric_for_node(node)
-                sudo('apt-get install pxe-kexec')
+                # Ubuntuisms galore
+                self._configure_fabric_for_node(node, username='ubuntu')
+                sudo('apt-get -y install pxe-kexec')
+                sudo('pxe-kexec -n -l linux -i eth0 %s' % (self.build_node().internal_ip))
 
     def wait_for_non_build_nodes(self):
         self._configure_fabric_for_build_node()
