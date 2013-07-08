@@ -33,14 +33,23 @@ def run_cmd(args):
 
 class Command(BaseCommand):
     def handle(self, job_id, **options):
+        print 'a'
         job = Job.objects.get(id=job_id)
+        print 'b'
         if not job.physical:
+            print 'c'
             timeout = time() + 300
+            print 'd'
             while timeout > time():
+                print 'e'
                 if job.cloud_slave_reservation.update_state() == job.cloud_slave_reservation.READY:
                     return ''
+                print 'f'
                 sleep(5)
+                print 'g'
+            print 'h'
             return 'Did not work'
+        print 'i'
         config = Configuration.get()
         job.redirect_output()
 

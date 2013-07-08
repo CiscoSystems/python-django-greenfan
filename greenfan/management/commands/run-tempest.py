@@ -55,10 +55,7 @@ class Command(BaseCommand):
         config = Configuration.get()
         job.redirect_output()
 
-        fabric_env.host_string = '%s@%s' % (config.admin_user, job.control_node().ip)
-        fabric_env.password = config.admin_password
-        fabric_env.abort_on_prompts = True
-        fabric_env.sudo_prefix = 'sudo -H -S -p \'%(sudo_prompt)s\' '
+        job._configure_fabric_for_control_node()
  
         # This is crude and horrible
         admin_user = job.description['users'][0]
@@ -82,17 +79,17 @@ class Command(BaseCommand):
         tempest_default_overrides['network'] = {}
         tempest_default_overrides['network']['api_version'] = 'v2.0'
         
-        glance = get_glance_connection(username=non_priv_user1['name'],
-                                       password=non_priv_user1['password'],
-                                       tenant_name=non_priv_user1['tenant'],
-                                       auth_url='http://%s:5000/v2.0/' % (job.control_node().ip))
-        image = list(glance.images.list(name=job.description['images'][0]['name']))[0]
-
+        sudo('apt-get -y install python-glanceclient')
+        image_id =  run('OS_USERNAME=%s OS_PASSWORD=%s OS_TENANT_NAME=%s OS_AUTH_URL=%s glance image-list --name="%s" | tail -n 2 | head -n 1 | sed -e "s/^..//g" -e "s/ .*//g"' % (non_priv_user1['name'],
+                                                                                                              non_priv_user1['password'],
+                                                                                                              non_priv_user1['tenant'],
+                                                                                                              'http://%s:5000/v2.0/' % (job.control_node().external_ip),
+                                                                                                              job.description['images'][0]['name'])).strip()
         if not 'ALL' in tempest_default_overrides:
             tempest_default_overrides['ALL'] = {}
 
-        tempest_default_overrides['ALL']['image_ref'] = image.id
-        tempest_default_overrides['ALL']['image_ref_alt'] = image.id
+        tempest_default_overrides['ALL']['image_ref'] = image_id
+        tempest_default_overrides['ALL']['image_ref_alt'] = image_id
         sudo('apt-get -y install git python-unittest2 python-testtools python-testresources')
         run('git clone -b stable/folsom https://github.com/CiscoSystems/tempest')
       
@@ -118,8 +115,9 @@ class Command(BaseCommand):
             out += "%s\n" % (l,)
 
         put(StringIO(out), 'tempest/etc/tempest.conf')
-        run("cd tempest ; nosetests -v -a '!whitebox' tempest")
-
+        result = run("cd tempest ; nosetests -v -a '!whitebox' tempest")
+        if (result.return_code == 0):
+           print "gate packages"
 #        glance_user = job.description['users'][0]
 #        env_string = 'OS_AUTH_URL=http://%s:5000/v2.0 OS_TENANT_NAME=%s OS_USERNAME=%s OS_PASSWORD=%s ' % (job.control_node().ip, glance_user['tenant'], glance_user['name'], glance_user['password'])
 #        run(env_string + 'glance image-create --name "precise" --is-public true --container-format bare --disk-format raw --copy-from http://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img')

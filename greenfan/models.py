@@ -23,7 +23,7 @@ import random
 import string
 import tempfile
 import urlparse
-from time import sleep
+from time import sleep, time
 import IPy
 
 from django.db import models
@@ -62,6 +62,9 @@ class Node(object):
 class VirtualNode(Node):
     def __init__(self, slave):
         self.slave = slave
+
+    def __eq__(self, other):
+        return self.slave == other.slave
 
     @property
     def mac(self):
@@ -127,12 +130,14 @@ class VirtualNode(Node):
 
     @property
     def admin_user(self):
-        job = self.slave.reservation.job_set.all()[0]:
+        job = self.slave.reservation.job_set.all()[0]
 
         # The build node does not get reinstalled
+        print self, job.build_node()
         if self == job.build_node():
             return 'ubuntu'
 
+        print  job.steps.index(job.step), job.steps.index('reboot-non-build-nodes')
         if job.steps.index(job.step) > job.steps.index('reboot-non-build-nodes'):
             return Configuration.get().admin_user
         else:
@@ -300,6 +305,7 @@ class Job(models.Model):
     physical = models.BooleanField()
     cloud_slave_reservation = models.ForeignKey(cloudslave_models.Reservation,
                                                 blank=True, null=True)
+    step = models.CharField(max_length=40, default='', blank=True, null=True)
 
     steps = ['start-log-listener'
              'list-nodes',
@@ -316,7 +322,8 @@ class Job(models.Model):
         from django.core.management import call_command
 
         def step(name):
-            job.step = name
+            self.step = name
+            self.save()
             call_command(name, '%s' % self.id)
 
         try:
@@ -410,7 +417,7 @@ class Job(models.Model):
             os.mkdir(self.logdir)
 
     def _get_nodes_still_installing(self):
-        out = sudo('cobbler system find --netboot-enabled=true')
+        out = sudo('cobbler system find --netboot-enabled=true').strip()
         nodes = out.split('\n')
         return  map(lambda x: x.strip(), nodes)
 
@@ -431,7 +438,45 @@ class Job(models.Model):
     def _configure_fabric_for_build_node(self):
         self._configure_fabric_for_node(self.build_node())
 
+    def provision_users(self):
+        self._configure_fabric_for_node(self.build_node())
+
+        from keystoneclient.v2_0 import client
+        keystone = client.Client(token='keystone_admin_token', endpoint='http://%s:35357/v2.0' % (self.control_node().external_ip,))
+        role_info = {}
+        for role in keystone.roles.list():
+            role_info[role.name] = role
+
+        tenant_info = dict((tenant.name, tenant) for tenant in keystone.tenants.list())
+        if 'tenants' in self.description:
+            tenants = self.description['tenants']
+            for tenant in tenants:
+                if tenant['name'] in tenant_info:
+                    continue
+                tenant_obj = keystone.tenants.create(tenant_name=tenant['name'], description=tenant.get('description', tenant['name']), enabled=True)
+                tenant_info[tenant['name']] = tenant_obj
+
+        user_info = dict((user.name,user) for user in keystone.users.list())
+        if 'users' in self.description:
+            users = self.description['users']
+            for user in users:
+                tenant = tenant_info[user['tenant']]
+
+                if user['name'] in user_info:
+                    user_obj = user_info[user['name']]
+                else:
+                    user_obj = keystone.users.create(name=user['name'],
+                                                     password=user['password'],
+                                                     email=user.get('email', '%s@example.com' % user['name']),
+                                                     tenant_id=tenant.id)
+
+                for role in user.get('roles', []):
+                    keystone.roles.add_user_role(user_obj, role_info[role], tenant)
+
+
     def reboot_non_build_nodes(self):
+        self.step = 'reboot-non-build-nodes'
+        self.save()
         self._configure_fabric_for_build_node()
 
         nodes = self._get_nodes_still_installing()
@@ -445,16 +490,18 @@ class Job(models.Model):
             nodes = filter(lambda x:x.name.split('.')[0] in nodes, self.nodes())
             for node in nodes:
                 # Ubuntuisms galore
-                self._configure_fabric_for_node(node, username='ubuntu')
+                self._configure_fabric_for_node(node)
                 sudo('apt-get -y install pxe-kexec')
                 sudo('pxe-kexec -n -l linux -i eth0 %s' % (self.build_node().internal_ip))
 
     def wait_for_non_build_nodes(self):
+        self.step = 'wait-for-non-build-nodes'
+        self.save()
         self._configure_fabric_for_build_node()
 
         timeout = time() + 60*60
         
-        expected_set = set([node.fqdn() for node in self.nodes()])
+        expected_set = set([node.fqdn for node in self.nodes()])
         while timeout > time():
 	    out = sudo('cd /var/lib/puppet/reports ; ls | cat')
             actual_set = set([name.strip() for name in out.split('\n')])
