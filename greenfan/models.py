@@ -16,7 +16,9 @@
 #   limitations under the License.
 #
 from crypt import crypt
+from glob import glob
 import json
+import logging
 import os
 import os.path
 import random
@@ -28,6 +30,7 @@ import IPy
 
 from django.db import models
 from django.conf import settings
+from django.core.management import call_command
 from fabric.api import env as fabric_env
 from fabric.api import run, sudo, put
 from jsonfield import JSONField
@@ -35,15 +38,21 @@ from cloudslave import models as cloudslave_models
 
 from greenfan import utils
 
+logger = logging.getLogger(__name__)
 
 class TestSpecification(models.Model):
     name = models.CharField(max_length=200)
     description = JSONField()
 
     def create_job(self, physical=False):
+        logger.debug('Creating job based on testspec %s' % (self.id))
         job = Job(description=self.description, physical=physical)
         job.save()
+        logger.info('Created job %s based on testspec %s' % (job.id, self.id))
         return job
+
+    def json_description(self):
+        return json.dumps(self.description, indent=2)
 
 
 class Node(object):
@@ -137,8 +146,7 @@ class VirtualNode(Node):
         if self == job.build_node():
             return 'ubuntu'
 
-        print  job.steps.index(job.step), job.steps.index('reboot-non-build-nodes')
-        if job.steps.index(job.step) > job.steps.index('reboot-non-build-nodes'):
+        if job.step > job.REBOOT_NON_BUILD_NODES:
             return Configuration.get().admin_user
         else:
             return 'ubuntu'
@@ -281,6 +289,8 @@ class VirtualNodeScheduler(NodeScheduler):
     def release_nodes(self):
         self.job.cloud_slave_reservation.terminate()
         self.job.cloud_slave_reservation.delete()
+        self.job.cloud_slave_reservation = None
+        self.job.save()
 
     def nodes(self):
         return [VirtualNode(slave) for slave in self.job.cloud_slave_reservation.slave_set.all()]
@@ -291,7 +301,7 @@ class Job(models.Model):
     RUNNING = 2
     FINISHED = 3
     CANCELED = 4
-    SERIES_STATES = (
+    JOB_STATES = (
         (PENDING, 'Pending'),
         (RUNNING, 'Running'),
         (FINISHED, 'Finished'),
@@ -301,46 +311,112 @@ class Job(models.Model):
     description = JSONField()
     log_listener_port = models.IntegerField(null=True, blank=True)
     state = models.SmallIntegerField(default=PENDING,
-                                     choices=SERIES_STATES)
+                                     choices=JOB_STATES)
     physical = models.BooleanField()
     cloud_slave_reservation = models.ForeignKey(cloudslave_models.Reservation,
                                                 blank=True, null=True)
-    step = models.CharField(max_length=40, default='', blank=True, null=True)
 
-    steps = ['start-log-listener'
-             'list-nodes',
-             'provision-build-node',
-             'wait-for-build-node',
-             'install-and-configure-puppet',
-             'reboot-non-build-nodes',
-             'wait-for-non-build-nodes',
-             'provision-users',
-             'import-images',
-             'run-tempest']
+    NOT_STARTED_YET = -1
+    START_LOG_LISTENER = 0
+    RESERVE_NODES = 1
+    LIST_NODES = 2
+    PROVISION_BUILD_NODE = 3
+    WAIT_FOR_BUILD_NODE = 4
+    INSTALL_AND_CONFIGURE_PUPPET = 5
+    REBOOT_NON_BUILD_NODES = 6
+    WAIT_FOR_NON_BUILD_NODES = 7
+    PROVISION_USERS = 8
+    IMPORT_IMAGES = 9
+    RUN_TEMPEST = 10
+    STOP_LOG_LISTENER = 11
+    TURN_OFF_NON_BUILD_NODES = 12
+    RELEASE_NODES = 13
+
+    STEPS_CHOICES = (
+        (NOT_STARTED_YET, 'Not started yet'),
+        (START_LOG_LISTENER, 'Starting log listener'),
+        (RESERVE_NODES, 'Reserving nodes'),
+        (LIST_NODES, 'Listing nodes'),
+        (PROVISION_BUILD_NODE, "Provisioning build node"),
+        (WAIT_FOR_BUILD_NODE, 'Waiting for build node to be ready'),
+        (INSTALL_AND_CONFIGURE_PUPPET, 'Installing and configuring Puppet'),
+        (REBOOT_NON_BUILD_NODES, 'Rebooting non-build nodes'),
+        (WAIT_FOR_NON_BUILD_NODES, 'Waiting for non-build nodes to finish installing'),
+        (PROVISION_USERS, 'Provisioning users'),
+        (IMPORT_IMAGES, 'Importing images'),
+        (RUN_TEMPEST, 'Running Tempest'),
+        (STOP_LOG_LISTENER, 'Stopping log listener'),
+        (TURN_OFF_NON_BUILD_NODES, 'Turning off non-build nodes'),
+        (RELEASE_NODES, 'Releasing nodes'))
+
+    step = models.IntegerField(default=-1, blank=True, null=True, choices=STEPS_CHOICES)
+
+    def get_physical_display(self):
+        return self.physical and 'physical' or 'virtual'
 
     def run(self):
-        from django.core.management import call_command
+        self.state = self.RUNNING
+        self.save()
+        try:
+            while True:
+                self.next_step()
+        except StopIteration:
+            pass
+            
+    def next_step(self):
+        self.step += 1
+        self.save()
 
         def step(name):
-            self.step = name
-            self.save()
+            print 'Running', name
             call_command(name, '%s' % self.id)
 
         try:
-            step('start-log-listener')
-            step('list-nodes')
-            step('provision-build-node')
-            step('wait-for-build-node')
-            step('install-and-configure-puppet')
-            step('reboot-non-build-nodes')
-            step('wait-for-non-build-nodes')
-            step('provision-users')
-            step('import-images')
-            step('run-tempest')
-        finally:
-            step('stop-log-listener')
-            step('turn-off-non-build-nodes')
+            if self.step == self.START_LOG_LISTENER:
+                step('start-log-listener')
+            elif self.step == self.RESERVE_NODES:
+                step('reserve-nodes')
+            elif self.step == self.LIST_NODES:
+                step('list-nodes')
+            elif self.step == self.PROVISION_BUILD_NODE:
+                step('provision-build-node')
+            elif self.step == self.WAIT_FOR_BUILD_NODE:
+                step('wait-for-build-node')
+            elif self.step == self.INSTALL_AND_CONFIGURE_PUPPET:
+                step('install-and-configure-puppet')
+            elif self.step == self.REBOOT_NON_BUILD_NODES:
+                step('reboot-non-build-nodes')
+            elif self.step == self.WAIT_FOR_NON_BUILD_NODES:
+                step('wait-for-non-build-nodes')
+            elif self.step == self.PROVISION_USERS:
+                step('provision-users')
+            elif self.step == self.IMPORT_IMAGES:
+                step('import-images')
+            elif self.step == self.RUN_TEMPEST:
+                step('run-tempest')
+            elif self.step == self.STOP_LOG_LISTENER:
+                step('stop-log-listener')
+            elif self.step == self.TURN_OFF_NON_BUILD_NODES:
+                step('turn-off-non-build-nodes')
+            elif self.step == self.RELEASE_NODES:
+                step('release-nodes')
+            else:
+                raise StopIteration()
+        except Exception, e:
+            self.state = self.FINISHED
+            self.save()
+            raise
+            
+    def get_log(self, name):
+       return self.get_all_logs()[name]
 
+    def get_all_logs(self):
+       logs = {}
+       if os.path.exists(self.rsyslog_log_file):
+           logs['Console'] = open(self.rsyslog_log_file, 'r')
+       logs.update((f[len(self.logdir) + len('/logfile.'):-len('.log')], open(f, 'r')) for f in glob(os.path.join(self.logdir, '*.log')))
+       return logs
+       
     @property
     def logdir(self):
         return os.path.join(settings.JOB_LOG_DIR, '%s' % self.pk)
@@ -475,8 +551,6 @@ class Job(models.Model):
 
 
     def reboot_non_build_nodes(self):
-        self.step = 'reboot-non-build-nodes'
-        self.save()
         self._configure_fabric_for_build_node()
 
         nodes = self._get_nodes_still_installing()
@@ -495,8 +569,6 @@ class Job(models.Model):
                 sudo('pxe-kexec -n -l linux -i eth0 %s' % (self.build_node().internal_ip))
 
     def wait_for_non_build_nodes(self):
-        self.step = 'wait-for-non-build-nodes'
-        self.save()
         self._configure_fabric_for_build_node()
 
         timeout = time() + 60*60
@@ -523,7 +595,7 @@ class Job(models.Model):
     def install_and_configure_puppet(self):
         self._configure_fabric_for_build_node()
         build_node = self.build_node()
-        sudo('echo %s %s %s | tee --append /etc/hosts' % (build_node.internal_ip, build_node.fqdn, build_node.name))
+        sudo('echo %s %s %s puppet.%s puppet | tee --append /etc/hosts' % (build_node.internal_ip, build_node.fqdn, build_node.name, Configuration.get().domain))
         if 'manifest' in self.description:
             manifest_dir = utils.build_manifest_dir(self.description['manifest'],
                                                    {'job': self,

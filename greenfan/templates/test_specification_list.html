@@ -7,16 +7,17 @@
 </tr>
 {% for spec in specs %}
 <tr>
-  <td rowspan="{{ spec.nodes_qs.count }}">{{ spec.name }}<pre>{{ spec.json_description }}</pre></td>
-  {% for node in spec.nodes %}
-    {% if not forloop.first %}
-<tr>
-    {% endif %}
-  <td>{{ node.name }}</td>
-  {% if not forloop.last %}
-</tr>
-  {% endif %}
-  {% endfor %}
+  <td>
+    <pre>{{ spec.json_description }}</pre>
+  </td>
+  <td>
+    <form action="{% url "jobs_list" %}" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create_job_from_testspec" />
+      <input type="hidden" name="testspec_id" value="{{ spec.id }}" />
+      <input type="submit" name="submit" value="Run as virtual job" />
+    </form>
+  </td>
 </tr>
 {% endfor %}
 </table>

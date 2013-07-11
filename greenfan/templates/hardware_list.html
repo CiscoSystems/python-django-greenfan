@@ -21,7 +21,7 @@ tr.disabled {
   <td>{{ server.name }}</td>
   <td>{{ server.ip }}</td>
   <td>{{ server.mac }}</td>
-  <td><a href="{% url hardware_profile_detail server.hardware_profile.name %}">{{ server.hardware_profile.name }}</a></td>
+  <td><a href="{% url "hardware_profile_detail" server.hardware_profile.name %}">{{ server.hardware_profile.name }}</a></td>
 </tr>
 {% endfor %}
 <tbody>

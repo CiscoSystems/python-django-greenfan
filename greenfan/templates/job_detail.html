@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block extra_css %}
+div#logs div {
+    position: float;
+}
+div#logs pre {
+  font-size: 90%;
+  line-height: 90%;
+  background: #000;
+  color: #fff;
+}
+ul li.active {
+  font-weight: bold;
+  font-size: 150%;
+}
+{% endblock %}
+{% block content %}
+<div class="well span3">
+  <h3>Basic information</h2>
+  <dl>
+    <dt>ID</dt>
+    <dd>{{ job.pk }}</dd>
+    <dt>Type</dt>
+    <dd>{{ job.get_physical_display }}</dd>
+    <dt>State</dt>
+    <dd id="job.state">{{ job.get_state_display }}</dd>
+  </dl>
+</div>
+<div class="well span3">
+  <h3>Progress</h3>
+  <ul id="steplist">
+    {% for step_id, step_description in job.STEPS_CHOICES %}
+    <li{% if step_description == job.get_step_display %} class="active"{% endif %}>{{ step_description }}</li>
+    {% endfor %}
+  </ul>
+</div>
+<div id="logs" class="span12">
+  <div id="logs-loading">
+    Loading logs <img src="{{ STATIC_URL }}/spinner.gif" />
+  </div>
+</div>
+<script lang="text/javascript" src="/static/ansispan.js">
+</script>
+<script>
+function update_metadata(data) {
+  for (key in data) { 
+    selector = '#job\\.' + key;
+    $(selector).html(data[key]);
+  }
+  $("#steplist li").each(function (idx) {
+    if (data["step"] == $(this).html()) {
+       $(this).addClass("active");
+    } else {
+       $(this).removeClass("active");
+    }
+  });
+
+  setTimeout(function() { 
+     $.getJSON('{% url "job_detail" job_id=job.id %}', update_metadata);
+  }, 1000);
+}
+
+function update_logs(data) {
+  for (key in data) { 
+    elem_id =  key.replace(/\./g, '_');
+    elem = $("#logs #" + elem_id + " pre.log");
+
+    if (elem.length == 0) {
+       $("#logs").append('<div id="' + elem_id + '"><h3>' + key + '</h3><a href="{% url "job_logs" job_id=job.id %}' + key + '/">(See full log)</a><pre class="log">' + data[key] + '</pre></div>');
+       elem = $("#logs #" + elem_id + " pre.log");
+    }
+
+    /* Ok, this is somewhat trickier than I had hoped.. */
+
+    /* We store the raw contents in a data field on the <pre> element */
+    buffer = elem.data("buffer");
+    buffer = buffer ? buffer : "";
+    /* Append the new stuff */
+    new_contents = buffer + data[key];
+
+    /* Then remove everything but that final 30 lines */
+    lines = new_contents.split('\n');
+    lines = lines.slice(-30);
+    new_buffer = lines.join('\n')
+
+    /* Store the new, truncated buffer in the data field */
+    elem.data("buffer", new_buffer);
+
+    /* Ok, get this: We store the new buffer using
+       elem.text to get it escaped properly. */
+    elem.text(new_buffer);
+    /* Then we pull it back out as HTML and call ansispan on it
+       to add the colour and save the result as the html. */
+    elem.html(ansispan(elem.html()));
+
+    offsets = $("#logs").data("offsets");
+    if (offsets === undefined)
+        offsets = {};
+    offsets[key] = (offsets[key] ? offsets[key] : 0) + data[key].length;
+
+    $("#logs").data("offsets", offsets);
+
+  }
+
+  $("#logs-loading").hide();
+
+  setTimeout(function() { 
+     $.getJSON('{% url "job_logs" job_id=job.id %}', $("#logs").data("offsets"), update_logs);
+  }, 120);
+}
+$(document).ready(function() {
+     $.getJSON('{% url "job_logs" job_id=job.id %}', {'tail': 4096}, update_logs);
+     $.getJSON('{% url "job_detail" job_id=job.id %}', update_metadata);
+});
+</script>
+{% endblock %}

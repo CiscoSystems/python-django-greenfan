@@ -27,6 +27,42 @@
   <body>
     <script src="http://code.jquery.com/jquery-latest.js"></script>
     <script src="{{ STATIC_URL }}/bootstrap/js/bootstrap.min.js"></script>
+    <script>
+      (function($) {
+        $.fn.linkWholeRows = function() {
+      
+          // for each object
+          return this.each(function() {
+      
+            // for each row
+            $(this).find('tbody tr').each(function() {
+              // get the first link's href
+              var href = $(this).find('td > a').attr('href');
+              // if none found then
+              if (href === undefined) {
+                return true; // continue
+              }
+      
+              // wrap all cells with links that do not already have a link
+              $(this).children().not(':has(a)').each(function() {
+                $(this).contents().wrapAll('<a href="' + href + '" />');
+              });
+      
+              // apply the row's height to all links
+              // in case that the cells' content have different heights
+              var height = $(this).children().css('height');
+              $(this).find('td > a').each(function() {
+                $(this).css('height', height);
+                $(this).css('display', 'block');
+                // do not forget to apply display:block to the links
+                // via css to make it work properly
+              });
+            }); // each row
+      
+          }); // each object
+        };
+      })(jQuery); 
+    </script>
     <div class="container">
       <div class="row">
         <div class="span12">
@@ -38,10 +74,24 @@
                   <span class="icon-bar"></span>
                   <span class="icon-bar"></span>
                 </a>
-                <a class="brand" href="#">OpenStack@Cisco</a>
+                <a class="brand" href="/">OpenStack@Cisco</a>
                 <div class="nav-collapse collapse">
                   <ul class="nav">
-                    <li><a href="#">Home</a></li>
+                    <li><a href="/">Home</a></li>
+                    <li class="dropdown">
+                      <a href="#" class="dropdown-toggle" data-toggle="dropdown">Infrastructure <b class="caret"></b></a>
+                      <ul class="dropdown-menu">
+                        <li><a href="{% url 'hardware_list' %}">Servers</a></li>
+                        <li><a href="{% url 'hardware_profile_list' %}">Hardware profiles</a></li>
+                      </ul>
+                    </li>
+                    <li class="dropdown">
+                      <a href="#" class="dropdown-toggle" data-toggle="dropdown">Tests <b class="caret"></b></a>
+                      <ul class="dropdown-menu">
+                        <li><a href="{% url 'test_specification_list' %}">Test specifications</a></li>
+                        <li><a href="{% url 'jobs_list' %}">Jobs</a></li>
+                      </ul>
+                    </li>
                   </ul>
                 </div><!--/.nav-collapse -->
                 <ul class="nav pull-right">
@@ -59,20 +109,14 @@
         </div>
       </div>
       <div class="row">
-        <div class="span3">
-          <div class ="well sidebar-nav">
-            <ul class="nav nav-list">
-              <li class="nav-header">Infrastructure</li>
-              <li><a href="{% url hardware_list %}">Servers</a></li>
-              <li><a href="{% url hardware_profile_list %}">Hardware profiles</a></li>
-              <li><a href="{% url test_specification_list %}">Test specifications</a></li>
-            </ul>
-          </div><!--/.well -->
-        </div><!--/span-->
-        <div class="span9">
+        <div class="span12">
   {% block content %}{% endblock %}
         </div><!--/span-->
       </div>
     </div> <!-- /container -->
+    <script>
+      $('.stretched-hrefs').linkWholeRows();
+    </script>
+
   </body>
 </html>
